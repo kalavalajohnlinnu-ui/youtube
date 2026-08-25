@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipTube PRO - YouTube Video & MP3 Trimmer</title>
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#3B82F6">
+    <!-- Google Fonts & FontAwesome Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Main Device View Outer Container -->
+    <div id="deviceFrameWrapper" class="device-frame-desktop">
+        <div class="app-container">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <i class="fa-solid fa-scissors"></i>
+                    </div>
+                    <div class="logo-text">
+                        <h1>ClipTube <span class="badge">PRO</span></h1>
+                        <p>YouTube Video & MP3 Trimmer & Downloader</p>
+                    </div>
+                </div>
+
+
+                <div class="header-badges">
+                    <button id="notifyBtn" class="pill-badge notify-btn" title="Enable Windows Desktop Notifications">
+                        <i class="fa-solid fa-bell"></i> Alerts
+                    </button>
+                    <button id="installAppBtn" class="pill-badge install-btn hidden">
+                        <i class="fa-solid fa-laptop"></i> Install App
+                    </button>
+                </div>
+            </header>
+
+            <!-- Main Search Bar -->
+            <section class="url-input-section">
+                <div class="url-input-wrapper">
+                    <i class="fa-brands fa-youtube search-icon"></i>
+                    <input type="text" id="ytUrlInput" placeholder="Paste YouTube Video or Live Stream Link (e.g. https://www.youtube.com/watch?v=...)" autocomplete="off">
+                    <button id="clearUrlBtn" class="icon-btn" title="Clear input"><i class="fa-solid fa-xmark"></i></button>
+                    <button id="fetchInfoBtn" class="primary-btn">
+                        <span class="btn-text"><i class="fa-solid fa-magnifying-glass"></i> Load Video</span>
+                        <span class="spinner hidden"><i class="fa-solid fa-circle-notch fa-spin"></i></span>
+                    </button>
+                </div>
+                <div class="quick-examples">
+                    <span>Try Sample:</span>
+                    <button class="sample-btn" data-url="https://www.youtube.com/watch?v=aqz-KE-bpKQ">Big Buck Bunny (Short)</button>
+                    <button class="sample-btn" data-url="https://www.youtube.com/watch?v=5qap5aO4i9A">Lofi Girl (Live Stream)</button>
+                </div>
+            </section>
+
+            <!-- Main Content Workspace (Hidden until video loaded) -->
+            <main id="mainWorkspace" class="workspace hidden">
+                <!-- Mode Selector Tabs -->
+                <div class="mode-tabs-bar glass-panel">
+                    <button class="mode-tab active" data-mode="trim-video">
+                        <i class="fa-solid fa-scissors"></i> Trim Video Segment
+                    </button>
+                    <button class="mode-tab" data-mode="trim-audio">
+                        <i class="fa-solid fa-music"></i> Trim MP3 Audio
+                    </button>
+                    <button class="mode-tab" data-mode="full-video">
+                        <i class="fa-solid fa-film"></i> Full Video
+                    </button>
+                    <button class="mode-tab" data-mode="full-audio">
+                        <i class="fa-solid fa-file-audio"></i> Full MP3
+                    </button>
+                </div>
+
+                <div class="workspace-grid">
+                    <!-- Left Column: Video Player & Time Sync -->
+                    <div class="player-card glass-panel">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-play"></i> Interactive Player Preview</h3>
+                            <div class="header-right-tags">
+                                <button id="unlockStreamRangeBtn" class="unlock-btn" title="Click if your video or live stream is multi-hour (3h+) and shows short duration">
+                                    <i class="fa-solid fa-unlock"></i> Unlock 12h Timeline
+                                </button>
+                                <span id="liveStatusTag" class="status-tag hidden"><i class="fa-solid fa-circle"></i> LIVE STREAM</span>
+                            </div>
+                        </div>
+
+                        <div class="video-player-wrapper">
+                            <div id="playerPlaceholder" class="player-placeholder">
+                                <i class="fa-brands fa-youtube placeholder-icon"></i>
+                                <p>Enter a YouTube URL to preview video</p>
+                            </div>
+                            <div id="ytPlayerContainer" class="hidden">
+                                <div id="ytIframe"></div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Sync Controls -->
+                        <div class="quick-cut-toolbar" id="quickCutToolbar">
+                            <button id="setStartBtn" class="tool-btn start-tool" title="Set current player playback position as Start Time">
+                                <i class="fa-solid fa-bracket-left"></i> Set Start: <span id="currentStartPreview" class="time-tag">00:00:00</span>
+                            </button>
+                            <button id="setEndBtn" class="tool-btn end-tool" title="Set current player playback position as End Time">
+                                Set End: <i class="fa-solid fa-bracket-right"></i> <span id="currentEndPreview" class="time-tag">00:00:00</span>
+                            </button>
+                            <button id="previewSegmentBtn" class="tool-btn preview-tool" title="Play selected timestamp segment in player">
+                                <i class="fa-solid fa-play"></i> Preview Segment
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Trimmer Timeline & Settings -->
+                    <div class="controls-card glass-panel">
+                        <div class="video-meta-summary">
+                            <img id="videoThumb" src="" alt="Thumbnail" class="thumb-img">
+                            <div class="meta-details">
+                                <h2 id="videoTitle">Video Title</h2>
+                                <p id="videoUploader"><i class="fa-solid fa-user"></i> Channel Name</p>
+                                <div class="meta-stats">
+                                    <span><i class="fa-solid fa-clock"></i> Duration: <strong id="videoDurationStr">00:00:00</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Trimming Controls & Separate Box Timeline -->
+                        <div class="trimmer-controls" id="trimmerControlsSection">
+                            <div class="section-title">
+                                <h4><i class="fa-solid fa-sliders"></i> Precise Timestamp Range Picker</h4>
+                                <span id="selectedDurationBadge" class="duration-badge">Selected: 00:00:00</span>
+                            </div>
+
+                            <!-- Visual Dual Range Slider -->
+                            <div class="timeline-container">
+                                <div class="timeline-track">
+                                    <div id="timelineProgress" class="timeline-progress"></div>
+                                </div>
+                                <input type="range" id="startRange" min="0" max="100" value="0" step="1" class="range-slider slider-start">
+                                <input type="range" id="endRange" min="0" max="100" value="100" step="1" class="range-slider slider-end">
+                            </div>
+
+                            <!-- SEPARATE TIME BOXES (HH : MM : SS) -->
+                            <div class="separate-time-picker-block">
+                                <!-- Start Time Box Group -->
+                                <div class="time-box-card">
+                                    <div class="box-header">
+                                        <span><i class="fa-solid fa-hourglass-start color-start"></i> START TIME</span>
+                                    </div>
+                                    <div class="triple-box-row">
+                                        <div class="unit-box">
+                                            <input type="number" id="startH" min="0" max="99" value="0" placeholder="00">
+                                            <label>HRS</label>
+                                        </div>
+                                        <span class="colon">:</span>
+                                        <div class="unit-box">
+                                            <input type="number" id="startM" min="0" max="59" value="0" placeholder="00">
+                                            <label>MIN</label>
+                                        </div>
+                                        <span class="colon">:</span>
+                                        <div class="unit-box">
+                                            <input type="number" id="startS" min="0" max="59" value="0" placeholder="00">
+                                            <label>SEC</label>
+                                        </div>
+                                    </div>
+                                    <div class="stepper-quick-bar">
+                                        <button class="step-mini-btn" id="stepStart1hSub">-1h</button>
+                                        <button class="step-mini-btn" id="stepStart15mSub">-15m</button>
+                                        <button class="step-mini-btn" id="stepStartSub">-5s</button>
+                                        <button class="step-mini-btn" id="stepStartAdd">+5s</button>
+                                        <button class="step-mini-btn" id="stepStart15mAdd">+15m</button>
+                                        <button class="step-mini-btn" id="stepStart1hAdd">+1h</button>
+                                    </div>
+                                </div>
+
+                                <!-- End Time Box Group -->
+                                <div class="time-box-card">
+                                    <div class="box-header">
+                                        <span><i class="fa-solid fa-hourglass-end color-end"></i> END TIME</span>
+                                    </div>
+                                    <div class="triple-box-row">
+                                        <div class="unit-box">
+                                            <input type="number" id="endH" min="0" max="99" value="0" placeholder="00">
+                                            <label>HRS</label>
+                                        </div>
+                                        <span class="colon">:</span>
+                                        <div class="unit-box">
+                                            <input type="number" id="endM" min="0" max="59" value="0" placeholder="00">
+                                            <label>MIN</label>
+                                        </div>
+                                        <span class="colon">:</span>
+                                        <div class="unit-box">
+                                            <input type="number" id="endS" min="0" max="59" value="10" placeholder="00">
+                                            <label>SEC</label>
+                                        </div>
+                                    </div>
+                                    <div class="stepper-quick-bar">
+                                        <button class="step-mini-btn" id="stepEnd1hSub">-1h</button>
+                                        <button class="step-mini-btn" id="stepEnd15mSub">-15m</button>
+                                        <button class="step-mini-btn" id="stepEndSub">-5s</button>
+                                        <button class="step-mini-btn" id="stepEndAdd">+5s</button>
+                                        <button class="step-mini-btn" id="stepEnd15mAdd">+15m</button>
+                                        <button class="step-mini-btn" id="stepEnd1hAdd">+1h</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Download Options -->
+                        <div class="download-options">
+                            <div class="option-group">
+                                <label><i class="fa-solid fa-file-video"></i> Output Format</label>
+                                <select id="formatSelect">
+                                    <option value="mp4" selected>MP4 (Video + Audio)</option>
+                                    <option value="mkv">MKV (Video + Audio)</option>
+                                    <option value="webm">WebM (Video + Audio)</option>
+                                    <option value="mp3">MP3 (High Quality Audio)</option>
+                                </select>
+                            </div>
+
+                            <div class="option-group" id="qualityGroup">
+                                <label><i class="fa-solid fa-film"></i> Quality</label>
+                                <select id="qualitySelect">
+                                    <option value="best" selected>Best Available (Highest)</option>
+                                    <option value="1080p">1080p Full HD</option>
+                                    <option value="720p">720p HD</option>
+                                    <option value="480p">480p SD</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Action CTA Button -->
+                        <button id="startTrimBtn" class="trim-cta-btn">
+                            <i class="fa-solid fa-scissors"></i> <span id="ctaBtnText">Cut & Download Video Segment</span>
+                        </button>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Download & Processing Modal with ETA & Auto Download -->
+            <div id="progressModal" class="modal-overlay hidden">
+                <div class="modal-card glass-panel">
+                    <button id="closeModalBtn" class="close-modal"><i class="fa-solid fa-xmark"></i></button>
+                    <div class="modal-header">
+                        <div class="status-icon-wrapper">
+                            <i id="statusIcon" class="fa-solid fa-gear fa-spin"></i>
+                        </div>
+                        <h3 id="statusTitle">Processing Clip Segment...</h3>
+                    </div>
+
+                    <div class="progress-container">
+                        <div class="progress-bar-track">
+                            <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
+                        </div>
+                        <div class="progress-info">
+                            <span id="progressMessage">Downloading media section...</span>
+                            <strong id="progressPct">0%</strong>
+                        </div>
+                        <!-- Predicted Remaining Time ETA Banner -->
+                        <div class="eta-banner" id="etaBanner">
+                            <i class="fa-solid fa-stopwatch"></i> Estimated Remaining Time: <strong id="etaTimeText">~5s</strong>
+                        </div>
+                    </div>
+
+                    <div id="downloadResult" class="download-result hidden">
+                        <p class="success-msg"><i class="fa-solid fa-circle-check"></i> Clip downloaded automatically to your device!</p>
+                        <a id="downloadLinkBtn" href="#" class="primary-btn download-btn" download>
+                            <i class="fa-solid fa-download"></i> Redownload File (<span id="fileSizeLabel">0 MB</span>)
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Download History Section -->
+            <section class="history-section">
+                <div class="section-header">
+                    <h3><i class="fa-solid fa-clock-rotate-left"></i> Recent Download History</h3>
+                    <button id="refreshHistoryBtn" class="text-btn"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+                </div>
+                <div id="historyList" class="history-grid">
+                    <div class="empty-history">No videos or MP3s downloaded yet in this session.</div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

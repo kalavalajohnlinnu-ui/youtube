@@ -1,0 +1,17 @@
+{
+  "name": "ClipTube PRO - YouTube Trimmer & Downloader",
+  "short_name": "ClipTube PRO",
+  "description": "Trim and download YouTube videos, live streams, and MP3 audio clips directly to your desktop.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090D16",
+  "theme_color": "#3B82F6",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "https://img.youtube.com/vi/aqz-KE-bpKQ/hqdefault.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    }
+  ]
+}
