@@ -30,9 +30,11 @@
                     </div>
                 </div>
 
-
                 <div class="header-badges">
-                    <button id="notifyBtn" class="pill-badge notify-btn" title="Enable Windows Desktop Notifications">
+                    <button id="serverConfigBtn" class="pill-badge server-btn" title="Configure Backend Server URL">
+                        <i class="fa-solid fa-server"></i> <span id="serverStatusText">Server</span>
+                    </button>
+                    <button id="notifyBtn" class="pill-badge notify-btn" title="Enable Desktop Notifications">
                         <i class="fa-solid fa-bell"></i> Alerts
                     </button>
                     <button id="installAppBtn" class="pill-badge install-btn hidden">
@@ -212,7 +214,7 @@
                         <!-- Download Options -->
                         <div class="download-options">
                             <div class="option-group">
-                                <label><i class="fa-solid fa-file-video"></i> Output Format</label>
+                                <label><i class="fa-solid fa-file-audio"></i> Output Format</label>
                                 <select id="formatSelect">
                                     <option value="mp4" selected>MP4 (Video + Audio)</option>
                                     <option value="mkv">MKV (Video + Audio)</option>
@@ -278,6 +280,40 @@
                             <i class="fa-solid fa-download"></i> Redownload File (<span id="fileSizeLabel">0 MB</span>)
                         </a>
                     </div>
+
+                    <!-- Cloud Stream Fallback for Serverless / Offline -->
+                    <div id="fallbackCloudDlBlock" class="hidden" style="margin-top: 1rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+                        <p style="font-size: 0.85rem; color: #9CA3AF; margin-bottom: 0.75rem;"><i class="fa-solid fa-bolt" style="color:#F59E0B;"></i> Instant Cloud Download Links (No Backend Required):</p>
+                        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+                            <a id="cloudDlBtn1" href="#" target="_blank" class="primary-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;"><i class="fa-solid fa-music"></i> Download Audio / Video</a>
+                            <button id="openConfigFromErrorBtn" class="pill-badge" style="cursor: pointer; padding: 0.5rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-gear"></i> Server Settings</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Backend Server Settings Modal -->
+            <div id="serverModal" class="modal-overlay hidden">
+                <div class="modal-card glass-panel" style="max-width: 480px;">
+                    <button id="closeServerModalBtn" class="close-modal"><i class="fa-solid fa-xmark"></i></button>
+                    <div class="modal-header">
+                        <div class="status-icon-wrapper">
+                            <i class="fa-solid fa-server"></i>
+                        </div>
+                        <h3>Backend Server Settings</h3>
+                    </div>
+                    <p style="color: #9CA3AF; font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.4;">
+                        When running on GitHub Pages, connect your HTTPS backend tunnel (e.g. localtunnel) or localhost for 1080p full rendering and 320kbps MP3 trimming.
+                    </p>
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; font-size: 0.85rem; margin-bottom: 0.35rem; color: #F3F4F6;">Backend Server URL:</label>
+                        <input type="text" id="backendUrlInput" placeholder="e.g. https://your-tunnel.loca.lt or http://localhost:8000" style="width: 100%; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); color: white; outline: none; font-size: 0.9rem;">
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
+                        <button id="testBackendBtn" class="pill-badge" style="cursor: pointer;"><i class="fa-solid fa-network-wired"></i> Test Connection</button>
+                        <button id="saveBackendBtn" class="primary-btn" style="padding: 0.6rem 1.2rem;"><i class="fa-solid fa-check"></i> Save</button>
+                    </div>
+                    <div id="backendTestResult" style="margin-top: 0.75rem; font-size: 0.85rem;" class="hidden"></div>
                 </div>
             </div>
 

@@ -2,11 +2,13 @@
 // ClipTube PRO - Client Application Logic
 // --------------------------------------------------------------------------
 
-// Dynamic Backend Resolver for GitHub Pages and Localhost
+// Default public backend for GitHub Pages & Localhost
+const DEFAULT_GITHUB_BACKEND = 'https://red-parents-cross.loca.lt';
+
 let API_BASE_URL = localStorage.getItem('cliptube_backend_url') || (
-    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? '' 
-        : 'http://localhost:8000'
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? ''
+        : DEFAULT_GITHUB_BACKEND
 );
 
 function getApiUrl(path) {
@@ -101,6 +103,18 @@ const downloadLinkBtn = document.getElementById('downloadLinkBtn');
 const fileSizeLabel = document.getElementById('fileSizeLabel');
 const audioPreviewBlock = document.getElementById('audioPreviewBlock');
 const audioPreviewElement = document.getElementById('audioPreviewElement');
+const fallbackCloudDlBlock = document.getElementById('fallbackCloudDlBlock');
+const cloudDlBtn1 = document.getElementById('cloudDlBtn1');
+const openConfigFromErrorBtn = document.getElementById('openConfigFromErrorBtn');
+
+const serverConfigBtn = document.getElementById('serverConfigBtn');
+const serverStatusText = document.getElementById('serverStatusText');
+const serverModal = document.getElementById('serverModal');
+const closeServerModalBtn = document.getElementById('closeServerModalBtn');
+const backendUrlInput = document.getElementById('backendUrlInput');
+const testBackendBtn = document.getElementById('testBackendBtn');
+const saveBackendBtn = document.getElementById('saveBackendBtn');
+const backendTestResult = document.getElementById('backendTestResult');
 
 const historyList = document.getElementById('historyList');
 const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
@@ -108,6 +122,76 @@ const sampleBtns = document.querySelectorAll('.sample-btn');
 
 const notifyBtn = document.getElementById('notifyBtn');
 const installAppBtn = document.getElementById('installAppBtn');
+
+// --- Server Settings Modal & Connectivity Check ---
+function checkBackendHealth() {
+    fetch(getApiUrl('/api/history'), {
+        headers: { 'Bypass-Tunnel-Reminder': 'true' },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
+    })
+    .then(r => {
+        if (r.ok) {
+            serverStatusText.innerHTML = '<span style="color:#10B981;">● Server Active</span>';
+            serverConfigBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        } else {
+            serverStatusText.innerHTML = '<span style="color:#F59E0B;">● Server Setup</span>';
+        }
+    })
+    .catch(() => {
+        serverStatusText.innerHTML = '<span style="color:#9CA3AF;">● Server Offline</span>';
+    });
+}
+
+serverConfigBtn.addEventListener('click', () => {
+    backendUrlInput.value = API_BASE_URL;
+    backendTestResult.classList.add('hidden');
+    serverModal.classList.remove('hidden');
+});
+
+closeServerModalBtn.addEventListener('click', () => serverModal.classList.add('hidden'));
+
+if (openConfigFromErrorBtn) {
+    openConfigFromErrorBtn.addEventListener('click', () => {
+        progressModal.classList.add('hidden');
+        backendUrlInput.value = API_BASE_URL;
+        backendTestResult.classList.add('hidden');
+        serverModal.classList.remove('hidden');
+    });
+}
+
+testBackendBtn.addEventListener('click', async () => {
+    const testUrl = backendUrlInput.value.trim().replace(/\/+$/, '');
+    backendTestResult.classList.remove('hidden');
+    backendTestResult.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Testing connection...';
+    backendTestResult.style.color = 'var(--text-muted)';
+
+    try {
+        const pingUrl = (testUrl ? testUrl : '') + '/api/history';
+        const res = await fetch(pingUrl, {
+            headers: { 'Bypass-Tunnel-Reminder': 'true' },
+            signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
+        });
+        if (res.ok) {
+            backendTestResult.innerHTML = '<i class="fa-solid fa-circle-check"></i> Connection successful! Backend is online and ready.';
+            backendTestResult.style.color = '#10B981';
+        } else {
+            backendTestResult.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Server returned HTTP ${res.status}.`;
+            backendTestResult.style.color = '#F59E0B';
+        }
+    } catch (e) {
+        backendTestResult.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Cannot reach server. Please check the URL or tunnel status.`;
+        backendTestResult.style.color = '#EF4444';
+    }
+});
+
+saveBackendBtn.addEventListener('click', () => {
+    const newUrl = backendUrlInput.value.trim().replace(/\/+$/, '');
+    API_BASE_URL = newUrl;
+    localStorage.setItem('cliptube_backend_url', newUrl);
+    serverModal.classList.add('hidden');
+    checkBackendHealth();
+    fetchHistory();
+});
 
 // --- YouTube IFrame API Ready Callback ---
 window.onYouTubeIframeAPIReady = function() {
@@ -428,7 +512,7 @@ function fetchVideoData(url) {
 
     fetch(getApiUrl('/api/info'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
         body: JSON.stringify({ url: cleanUrl }),
         signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
     })
@@ -564,6 +648,7 @@ async function startProcessing() {
         return;
     }
 
+    const videoId = extractYouTubeId(url);
     const format = formatSelect.value;
     const quality = qualitySelect.value;
     const is_full_download = (activeMode === 'full-video' || activeMode === 'full-audio');
@@ -589,6 +674,7 @@ async function startProcessing() {
     hasAutoDownloaded = false;
     progressModal.classList.remove('hidden');
     downloadResult.classList.add('hidden');
+    if (fallbackCloudDlBlock) fallbackCloudDlBlock.classList.add('hidden');
     if (audioPreviewBlock) audioPreviewBlock.classList.add('hidden');
     if (audioPreviewElement) {
         audioPreviewElement.pause();
@@ -604,10 +690,15 @@ async function startProcessing() {
     progressMessage.textContent = "Connecting to downloader engine...";
     etaTimeText.textContent = "~8s remaining";
 
+    // Setup direct cloud fallback buttons in case backend is offline
+    if (cloudDlBtn1 && videoId) {
+        cloudDlBtn1.href = `https://www.y2mate.com/youtube/${videoId}`;
+    }
+
     try {
         const response = await fetch(getApiUrl('/api/trim'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
             body: JSON.stringify({
                 url,
                 start_time,
@@ -616,12 +707,13 @@ async function startProcessing() {
                 quality,
                 audio_only,
                 is_full_download
-            })
+            }),
+            signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
         });
 
         if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.detail || 'Failed to start processing task');
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.detail || 'Backend processing error');
         }
 
         const data = await response.json();
@@ -632,11 +724,15 @@ async function startProcessing() {
 
     } catch (err) {
         statusIcon.className = "fa-solid fa-triangle-exclamation";
-        statusTitle.textContent = "Processing Error";
-        progressMessage.textContent = err.message;
+        statusTitle.textContent = "Backend Connection Notice";
+        progressMessage.textContent = "Backend server offline or tunnel disconnected.";
         progressBarFill.style.width = "0%";
         progressPct.textContent = "0%";
-        etaTimeText.textContent = "Error";
+        etaTimeText.textContent = "Offline";
+        
+        if (fallbackCloudDlBlock) {
+            fallbackCloudDlBlock.classList.remove('hidden');
+        }
     }
 }
 
@@ -644,7 +740,9 @@ async function pollTaskStatus() {
     if (!activeTaskId) return;
 
     try {
-        const response = await fetch(getApiUrl(`/api/status/${activeTaskId}`));
+        const response = await fetch(getApiUrl(`/api/status/${activeTaskId}`), {
+            headers: { 'Bypass-Tunnel-Reminder': 'true' }
+        });
         if (!response.ok) return;
 
         const data = await response.json();
@@ -712,9 +810,13 @@ async function pollTaskStatus() {
             pollTimer = null;
 
             statusIcon.className = "fa-solid fa-circle-xmark";
-            statusTitle.textContent = "Processing Error";
+            statusTitle.textContent = "Processing Notice";
             progressMessage.textContent = data.message;
             etaTimeText.textContent = "Failed";
+
+            if (fallbackCloudDlBlock) {
+                fallbackCloudDlBlock.classList.remove('hidden');
+            }
         }
     } catch (e) {}
 }
@@ -722,7 +824,9 @@ async function pollTaskStatus() {
 // --- History Renderer ---
 async function fetchHistory() {
     try {
-        const res = await fetch(getApiUrl('/api/history'));
+        const res = await fetch(getApiUrl('/api/history'), {
+            headers: { 'Bypass-Tunnel-Reminder': 'true' }
+        });
         if (!res.ok) return;
         const data = await res.json();
 
@@ -785,4 +889,5 @@ if (getEndTotalSeconds() === 0) {
     setEndBoxFromSeconds(10);
 }
 applyModeSettings();
+checkBackendHealth();
 fetchHistory();
