@@ -1,3 +1,7 @@
+// --------------------------------------------------------------------------
+// ClipTube PRO - Client Application Logic
+// --------------------------------------------------------------------------
+
 // Dynamic Backend Resolver for GitHub Pages and Localhost
 let API_BASE_URL = localStorage.getItem('cliptube_backend_url') || (
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
@@ -6,15 +10,13 @@ let API_BASE_URL = localStorage.getItem('cliptube_backend_url') || (
 );
 
 function getApiUrl(path) {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
     if (!API_BASE_URL) return path;
     const cleanBase = API_BASE_URL.replace(/\/+$/, '');
     const cleanPath = path.startsWith('/') ? path : '/' + path;
     return cleanBase + cleanPath;
 }
-
-// --------------------------------------------------------------------------
-// ClipTube PRO - Client Application Logic
-// --------------------------------------------------------------------------
 
 let ytPlayer = null;
 let currentVideoData = null;
@@ -24,8 +26,8 @@ let playerTimeInterval = null;
 let activeMode = 'trim-video';
 let deferredPrompt = null;
 let hasAutoDownloaded = false;
-let ytApiReady = false;       // true once YouTube IFrame API has loaded
-let pendingVideoId = null;    // holds a video ID if Load Video clicked before API ready
+let ytApiReady = false;
+let pendingVideoId = null;
 
 const ytUrlInput = document.getElementById('ytUrlInput');
 const clearUrlBtn = document.getElementById('clearUrlBtn');
@@ -81,6 +83,7 @@ const currentEndPreview = document.getElementById('currentEndPreview');
 
 const formatSelect = document.getElementById('formatSelect');
 const qualityGroup = document.getElementById('qualityGroup');
+const qualityLabel = document.getElementById('qualityLabel');
 const qualitySelect = document.getElementById('qualitySelect');
 const startTrimBtn = document.getElementById('startTrimBtn');
 const ctaBtnText = document.getElementById('ctaBtnText');
@@ -96,6 +99,8 @@ const etaTimeText = document.getElementById('etaTimeText');
 const downloadResult = document.getElementById('downloadResult');
 const downloadLinkBtn = document.getElementById('downloadLinkBtn');
 const fileSizeLabel = document.getElementById('fileSizeLabel');
+const audioPreviewBlock = document.getElementById('audioPreviewBlock');
+const audioPreviewElement = document.getElementById('audioPreviewElement');
 
 const historyList = document.getElementById('historyList');
 const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
@@ -105,17 +110,14 @@ const notifyBtn = document.getElementById('notifyBtn');
 const installAppBtn = document.getElementById('installAppBtn');
 
 // --- YouTube IFrame API Ready Callback ---
-// This MUST be a global function — YouTube calls it automatically when the API script loads.
 window.onYouTubeIframeAPIReady = function() {
     ytApiReady = true;
-    // If the user already clicked Load Video while the API was still loading, create player now
     if (pendingVideoId) {
         createYTPlayer(pendingVideoId);
         pendingVideoId = null;
     }
 };
 
-// Edge case: YT API may have already loaded before app.js ran (e.g. from cache)
 if (window.YT && window.YT.Player) {
     ytApiReady = true;
 }
@@ -235,32 +237,74 @@ modeTabs.forEach(tab => {
 });
 
 function applyModeSettings() {
+    const isAudio = (activeMode === 'trim-audio' || activeMode === 'full-audio');
+    
+    if (isAudio) {
+        if (!['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(formatSelect.value)) {
+            formatSelect.value = 'mp3';
+        }
+        if (qualityGroup && qualityLabel && qualitySelect) {
+            qualityGroup.classList.remove('hidden');
+            qualityLabel.innerHTML = '<i class="fa-solid fa-sliders"></i> Audio Bitrate';
+            qualitySelect.innerHTML = `
+                <option value="best" selected>320 kbps (High Quality Studio)</option>
+                <option value="256k">256 kbps (High)</option>
+                <option value="192k">192 kbps (Standard)</option>
+                <option value="128k">128 kbps (Compact)</option>
+            `;
+        }
+    } else {
+        if (['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(formatSelect.value)) {
+            formatSelect.value = 'mp4';
+        }
+        if (qualityGroup && qualityLabel && qualitySelect) {
+            qualityGroup.classList.remove('hidden');
+            qualityLabel.innerHTML = '<i class="fa-solid fa-film"></i> Video Quality';
+            qualitySelect.innerHTML = `
+                <option value="best" selected>Best Available (Highest)</option>
+                <option value="1080p">1080p Full HD</option>
+                <option value="720p">720p HD</option>
+                <option value="480p">480p SD</option>
+            `;
+        }
+    }
+
     if (activeMode === 'trim-video') {
         trimmerControlsSection.classList.remove('hidden');
         quickCutToolbar.classList.remove('hidden');
-        formatSelect.value = 'mp4';
-        qualityGroup.classList.remove('hidden');
         ctaBtnText.textContent = "Cut & Download Video Segment";
     } else if (activeMode === 'trim-audio') {
         trimmerControlsSection.classList.remove('hidden');
         quickCutToolbar.classList.remove('hidden');
-        formatSelect.value = 'mp3';
-        qualityGroup.classList.add('hidden');
         ctaBtnText.textContent = "Cut & Download MP3 Audio";
     } else if (activeMode === 'full-video') {
         trimmerControlsSection.classList.add('hidden');
         quickCutToolbar.classList.add('hidden');
-        formatSelect.value = 'mp4';
-        qualityGroup.classList.remove('hidden');
         ctaBtnText.textContent = "Download Full Video";
     } else if (activeMode === 'full-audio') {
         trimmerControlsSection.classList.add('hidden');
         quickCutToolbar.classList.add('hidden');
-        formatSelect.value = 'mp3';
-        qualityGroup.classList.add('hidden');
         ctaBtnText.textContent = "Download Full MP3 Audio";
     }
 }
+
+formatSelect.addEventListener('change', () => {
+    const isAudio = ['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(formatSelect.value);
+    if (isAudio && activeMode === 'trim-video') {
+        activeMode = 'trim-audio';
+        modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === 'trim-audio'));
+    } else if (!isAudio && activeMode === 'trim-audio') {
+        activeMode = 'trim-video';
+        modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === 'trim-video'));
+    } else if (isAudio && activeMode === 'full-video') {
+        activeMode = 'full-audio';
+        modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === 'full-audio'));
+    } else if (!isAudio && activeMode === 'full-audio') {
+        activeMode = 'full-video';
+        modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === 'full-video'));
+    }
+    applyModeSettings();
+});
 
 // --- YouTube IFrame API ---
 function loadYouTubePlayer(videoId) {
@@ -268,20 +312,16 @@ function loadYouTubePlayer(videoId) {
     playerPlaceholder.classList.add('hidden');
 
     if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
-        // Player already exists — just swap the video
         try { ytPlayer.loadVideoById(videoId); } catch (e) { console.error('loadVideoById error:', e); }
     } else if (ytApiReady || (window.YT && window.YT.Player)) {
-        // API is ready (either via our flag or window.YT direct check)
         ytApiReady = true;
         createYTPlayer(videoId);
     } else {
-        // API not ready yet — queue it; onYouTubeIframeAPIReady will pick it up
         pendingVideoId = videoId;
     }
 }
 
 function createYTPlayer(videoId) {
-    // Reset the div because YT replaces it in-place
     ytPlayerContainer.innerHTML = '<div id="ytIframe"></div>';
     ytPlayer = new YT.Player('ytIframe', {
         videoId: videoId,
@@ -375,7 +415,6 @@ function fetchVideoData(url) {
         return;
     }
 
-    // ── INSTANT: show workspace & load player immediately, NO server call needed ──
     currentVideoData = { id: videoId, url: cleanUrl, duration: 0 };
 
     mainWorkspace.classList.remove('hidden');
@@ -383,12 +422,10 @@ function fetchVideoData(url) {
     videoUploader.innerHTML = '<i class="fa-solid fa-user"></i> YouTube Channel';
     videoThumb.src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
-    // Default 3-hour timeline; player's onReady will report real duration
     setVideoDuration(3 * 3600);
     loadYouTubePlayer(videoId);
     mainWorkspace.scrollIntoView({ behavior: 'smooth' });
 
-    // ── BACKGROUND: quietly fetch title/uploader from server (never blocks UI) ──
     fetch(getApiUrl('/api/info'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -417,11 +454,9 @@ function fetchVideoData(url) {
         }
     })
     .catch(() => {
-        // silently ignore — player already loaded anyway
         videoTitle.textContent = 'YouTube Video';
     });
 }
-
 
 // --- Sliders & Timeline ---
 function updateTimelineUI() {
@@ -521,14 +556,6 @@ previewSegmentBtn.addEventListener('click', () => {
     }
 });
 
-formatSelect.addEventListener('change', () => {
-    if (formatSelect.value === 'mp3') {
-        qualityGroup.classList.add('hidden');
-    } else {
-        qualityGroup.classList.remove('hidden');
-    }
-});
-
 // --- Automatic Download Execution & Task Polling ---
 async function startProcessing() {
     const url = ytUrlInput.value.trim();
@@ -540,7 +567,7 @@ async function startProcessing() {
     const format = formatSelect.value;
     const quality = qualitySelect.value;
     const is_full_download = (activeMode === 'full-video' || activeMode === 'full-audio');
-    const audio_only = (activeMode === 'trim-audio' || activeMode === 'full-audio' || format === 'mp3');
+    const audio_only = (activeMode === 'trim-audio' || activeMode === 'full-audio' || ['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(format));
 
     let start_time = getStartFormatted();
     let end_time = getEndFormatted();
@@ -562,8 +589,16 @@ async function startProcessing() {
     hasAutoDownloaded = false;
     progressModal.classList.remove('hidden');
     downloadResult.classList.add('hidden');
+    if (audioPreviewBlock) audioPreviewBlock.classList.add('hidden');
+    if (audioPreviewElement) {
+        audioPreviewElement.pause();
+        audioPreviewElement.src = '';
+    }
+
     statusIcon.className = "fa-solid fa-gear fa-spin";
-    statusTitle.textContent = is_full_download ? "Downloading Full Media..." : "Processing Clip Segment...";
+    statusTitle.textContent = is_full_download 
+        ? (audio_only ? "Downloading Full Audio..." : "Downloading Full Video...") 
+        : (audio_only ? "Trimming Audio Segment..." : "Trimming Video Segment...");
     progressBarFill.style.width = "10%";
     progressPct.textContent = "10%";
     progressMessage.textContent = "Connecting to downloader engine...";
@@ -631,22 +666,45 @@ async function pollTaskStatus() {
             statusIcon.className = "fa-solid fa-circle-check";
             statusTitle.textContent = "Media Ready!";
             downloadResult.classList.remove('hidden');
-            downloadLinkBtn.href = data.download_url;
+            
+            const resolvedDownloadUrl = getApiUrl(data.download_url);
+            downloadLinkBtn.href = resolvedDownloadUrl;
             fileSizeLabel.textContent = `${data.file_size_mb} MB`;
             etaTimeText.textContent = "Done!";
 
+            // In-browser Audio Player Preview
+            const isAudioFile = data.filename && (
+                data.filename.endsWith('.mp3') || 
+                data.filename.endsWith('.m4a') || 
+                data.filename.endsWith('.wav') || 
+                data.filename.endsWith('.aac') || 
+                data.filename.endsWith('.flac') || 
+                data.filename.endsWith('.ogg')
+            );
+            
+            if (audioPreviewBlock && audioPreviewElement) {
+                if (isAudioFile) {
+                    audioPreviewElement.src = resolvedDownloadUrl;
+                    audioPreviewBlock.classList.remove('hidden');
+                    audioPreviewElement.load();
+                } else {
+                    audioPreviewBlock.classList.add('hidden');
+                    audioPreviewElement.pause();
+                }
+            }
+
             // INSTANT AUTOMATIC FILE DOWNLOAD
-            if (!hasAutoDownloaded && data.download_url) {
+            if (!hasAutoDownloaded && resolvedDownloadUrl) {
                 hasAutoDownloaded = true;
                 const autoLink = document.createElement('a');
-                autoLink.href = data.download_url;
-                autoLink.download = data.filename || 'clip.mp4';
+                autoLink.href = resolvedDownloadUrl;
+                autoLink.download = data.filename || 'clip';
                 document.body.appendChild(autoLink);
                 autoLink.click();
                 document.body.removeChild(autoLink);
             }
 
-            sendDesktopNotification("ClipTube PRO - Download Ready!", `Your file ${data.filename} (${data.file_size_mb} MB) was automatically downloaded.`);
+            sendDesktopNotification("ClipTube PRO - Download Ready!", `Your file ${data.filename} (${data.file_size_mb} MB) is ready.`);
 
             fetchHistory();
         } else if (data.status === 'error') {
@@ -673,7 +731,10 @@ async function fetchHistory() {
             return;
         }
 
-        historyList.innerHTML = data.history.map(item => `
+        historyList.innerHTML = data.history.map(item => {
+            const dlUrl = getApiUrl(item.download_url);
+            const isAudio = item.filename && (item.filename.endsWith('.mp3') || item.filename.endsWith('.m4a') || item.filename.endsWith('.wav'));
+            return `
             <div class="history-card">
                 <div class="history-card-header">
                     <div>
@@ -682,12 +743,14 @@ async function fetchHistory() {
                     </div>
                     <div class="history-time">${item.start_time} ➜ ${item.end_time}</div>
                 </div>
+                ${isAudio ? `<audio controls src="${dlUrl}" style="width:100%; height:32px; margin: 0.5rem 0; border-radius: 4px;"></audio>` : ''}
                 <div class="history-card-footer">
                     <span class="history-size">${item.size_mb} MB • ${item.created_at}</span>
-                    <a href="${item.download_url}" class="small-dl-btn" download><i class="fa-solid fa-download"></i> Save</a>
+                    <a href="${dlUrl}" class="small-dl-btn" download><i class="fa-solid fa-download"></i> Save</a>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
 
     } catch (e) {}
 }
@@ -711,7 +774,10 @@ sampleBtns.forEach(btn => {
 });
 
 startTrimBtn.addEventListener('click', startProcessing);
-closeModalBtn.addEventListener('click', () => progressModal.classList.add('hidden'));
+closeModalBtn.addEventListener('click', () => {
+    progressModal.classList.add('hidden');
+    if (audioPreviewElement) audioPreviewElement.pause();
+});
 refreshHistoryBtn.addEventListener('click', fetchHistory);
 
 // Initial Load Setup

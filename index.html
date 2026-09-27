@@ -217,12 +217,15 @@
                                     <option value="mp4" selected>MP4 (Video + Audio)</option>
                                     <option value="mkv">MKV (Video + Audio)</option>
                                     <option value="webm">WebM (Video + Audio)</option>
-                                    <option value="mp3">MP3 (High Quality Audio)</option>
+                                    <option value="mp3">MP3 (Audio)</option>
+                                    <option value="m4a">M4A (AAC Audio)</option>
+                                    <option value="wav">WAV (Lossless Audio)</option>
+                                    <option value="flac">FLAC (Lossless Audio)</option>
                                 </select>
                             </div>
 
                             <div class="option-group" id="qualityGroup">
-                                <label><i class="fa-solid fa-film"></i> Quality</label>
+                                <label id="qualityLabel"><i class="fa-solid fa-film"></i> Quality</label>
                                 <select id="qualitySelect">
                                     <option value="best" selected>Best Available (Highest)</option>
                                     <option value="1080p">1080p Full HD</option>
@@ -267,6 +270,10 @@
 
                     <div id="downloadResult" class="download-result hidden">
                         <p class="success-msg"><i class="fa-solid fa-circle-check"></i> Clip downloaded automatically to your device!</p>
+                        <div id="audioPreviewBlock" class="audio-player-wrapper hidden" style="margin: 1rem 0; width: 100%; text-align: center;">
+                            <label style="display: block; font-size: 0.85rem; color: #9CA3AF; margin-bottom: 0.4rem;"><i class="fa-solid fa-headphones"></i> Listen to Trimmed Audio Preview:</label>
+                            <audio id="audioPreviewElement" controls style="width: 100%; outline: none;"></audio>
+                        </div>
                         <a id="downloadLinkBtn" href="#" class="primary-btn download-btn" download>
                             <i class="fa-solid fa-download"></i> Redownload File (<span id="fileSizeLabel">0 MB</span>)
                         </a>
