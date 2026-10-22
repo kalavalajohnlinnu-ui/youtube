@@ -31,6 +31,12 @@ app.add_middleware(
 tasks_db: Dict[str, Dict[str, Any]] = {}
 history_db: List[Dict[str, Any]] = []
 
+@app.get("/api/health")
+@app.get("/api/status")
+def health_check():
+    return {"status": "ok", "service": "ClipTube PRO Backend", "version": "2.0"}
+
+
 class VideoInfoRequest(BaseModel):
     url: str
 
@@ -172,10 +178,25 @@ def download_file(filename: str):
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="File not found")
     
+    ext = os.path.splitext(safe_filename)[1].lower()
+    media_types = {
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".wav": "audio/wav",
+        ".aac": "audio/aac",
+        ".flac": "audio/flac",
+        ".ogg": "audio/ogg",
+        ".opus": "audio/opus",
+        ".mp4": "video/mp4",
+        ".mkv": "video/x-matroska",
+        ".webm": "video/webm",
+    }
+    media_type = media_types.get(ext, "application/octet-stream")
+    
     return FileResponse(
         path=filepath,
         filename=safe_filename,
-        media_type="application/octet-stream"
+        media_type=media_type
     )
 
 @app.get("/api/history")

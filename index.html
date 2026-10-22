@@ -13,6 +13,79 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
+    <style>
+        .badge-active { color: #10B981 !important; }
+        .badge-cloud { color: #38BDF8 !important; }
+        .badge-warn { color: #F59E0B !important; }
+        .cloud-hub-card {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1rem;
+            text-align: left;
+        }
+        .cloud-hub-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #F3F4F6;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .cloud-btn-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 0.6rem;
+            margin-top: 0.75rem;
+        }
+        .cloud-action-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.65rem 0.85rem;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            text-decoration: none;
+            color: white;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .cloud-action-btn:hover {
+            background: rgba(59, 130, 246, 0.4);
+            transform: translateY(-1px);
+        }
+        .cloud-action-btn.btn-audio {
+            background: rgba(139, 92, 246, 0.2);
+            border-color: rgba(139, 92, 246, 0.4);
+        }
+        .cloud-action-btn.btn-audio:hover {
+            background: rgba(139, 92, 246, 0.4);
+        }
+        .cloud-action-btn.btn-green {
+            background: rgba(16, 185, 129, 0.2);
+            border-color: rgba(16, 185, 129, 0.4);
+        }
+        .cloud-action-btn.btn-green:hover {
+            background: rgba(16, 185, 129, 0.4);
+        }
+        .local-trimmer-box {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 0.85rem;
+            margin-top: 0.75rem;
+            text-align: center;
+        }
+        .local-trimmer-box input[type="file"] {
+            display: none;
+        }
+    </style>
 </head>
 <body>
     <!-- Main Device View Outer Container -->
@@ -32,7 +105,7 @@
 
                 <div class="header-badges">
                     <button id="serverConfigBtn" class="pill-badge server-btn" title="Configure Backend Server URL">
-                        <i class="fa-solid fa-server"></i> <span id="serverStatusText">Server</span>
+                        <i class="fa-solid fa-server"></i> <span id="serverStatusText">Connecting...</span>
                     </button>
                     <button id="notifyBtn" class="pill-badge notify-btn" title="Enable Desktop Notifications">
                         <i class="fa-solid fa-bell"></i> Alerts
@@ -104,10 +177,10 @@
 
                         <!-- Quick Sync Controls -->
                         <div class="quick-cut-toolbar" id="quickCutToolbar">
-                            <button id="setStartBtn" class="tool-btn start-tool" title="Set current player playback position as Start Time">
+                            <button id="setStartBtn" class="tool-btn start-tool" title="Set current playback position as Start Time">
                                 <i class="fa-solid fa-bracket-left"></i> Set Start: <span id="currentStartPreview" class="time-tag">00:00:00</span>
                             </button>
-                            <button id="setEndBtn" class="tool-btn end-tool" title="Set current player playback position as End Time">
+                            <button id="setEndBtn" class="tool-btn end-tool" title="Set current playback position as End Time">
                                 Set End: <i class="fa-solid fa-bracket-right"></i> <span id="currentEndPreview" class="time-tag">00:00:00</span>
                             </button>
                             <button id="previewSegmentBtn" class="tool-btn preview-tool" title="Play selected timestamp segment in player">
@@ -247,13 +320,13 @@
 
             <!-- Download & Processing Modal with ETA & Auto Download -->
             <div id="progressModal" class="modal-overlay hidden">
-                <div class="modal-card glass-panel">
+                <div class="modal-card glass-panel" style="max-width: 540px;">
                     <button id="closeModalBtn" class="close-modal"><i class="fa-solid fa-xmark"></i></button>
                     <div class="modal-header">
                         <div class="status-icon-wrapper">
                             <i id="statusIcon" class="fa-solid fa-gear fa-spin"></i>
                         </div>
-                        <h3 id="statusTitle">Processing Clip Segment...</h3>
+                        <h3 id="statusTitle">Processing Media Segment...</h3>
                     </div>
 
                     <div class="progress-container">
@@ -261,7 +334,7 @@
                             <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
                         </div>
                         <div class="progress-info">
-                            <span id="progressMessage">Downloading media section...</span>
+                            <span id="progressMessage">Preparing download request...</span>
                             <strong id="progressPct">0%</strong>
                         </div>
                         <!-- Predicted Remaining Time ETA Banner -->
@@ -270,8 +343,9 @@
                         </div>
                     </div>
 
+                    <!-- Success State -->
                     <div id="downloadResult" class="download-result hidden">
-                        <p class="success-msg"><i class="fa-solid fa-circle-check"></i> Clip downloaded automatically to your device!</p>
+                        <p class="success-msg"><i class="fa-solid fa-circle-check"></i> Media ready and downloaded automatically to your device!</p>
                         <div id="audioPreviewBlock" class="audio-player-wrapper hidden" style="margin: 1rem 0; width: 100%; text-align: center;">
                             <label style="display: block; font-size: 0.85rem; color: #9CA3AF; margin-bottom: 0.4rem;"><i class="fa-solid fa-headphones"></i> Listen to Trimmed Audio Preview:</label>
                             <audio id="audioPreviewElement" controls style="width: 100%; outline: none;"></audio>
@@ -281,12 +355,37 @@
                         </a>
                     </div>
 
-                    <!-- Cloud Stream Fallback for Serverless / Offline -->
-                    <div id="fallbackCloudDlBlock" class="hidden" style="margin-top: 1rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
-                        <p style="font-size: 0.85rem; color: #9CA3AF; margin-bottom: 0.75rem;"><i class="fa-solid fa-bolt" style="color:#F59E0B;"></i> Instant Cloud Download Links (No Backend Required):</p>
-                        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
-                            <a id="cloudDlBtn1" href="#" target="_blank" class="primary-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;"><i class="fa-solid fa-music"></i> Download Audio / Video</a>
-                            <button id="openConfigFromErrorBtn" class="pill-badge" style="cursor: pointer; padding: 0.5rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-gear"></i> Server Settings</button>
+                    <!-- Universal Cloud Trimmer Hub (Fallback for Offline / Remote use) -->
+                    <div id="fallbackCloudDlBlock" class="hidden cloud-hub-card">
+                        <div class="cloud-hub-title">
+                            <i class="fa-solid fa-bolt" style="color: #38BDF8;"></i>
+                            <span>Universal Download & Trimming Hub</span>
+                        </div>
+                        <p id="cloudClipSummary" style="font-size: 0.82rem; color: #9CA3AF; margin-bottom: 0.5rem; line-height: 1.4;">
+                            Selected range: <strong>00:00:00</strong> ➜ <strong>00:00:00</strong>
+                        </p>
+                        <div class="cloud-btn-grid">
+                            <a id="cloudTrimOnlineBtn" href="#" target="_blank" class="cloud-action-btn">
+                                <i class="fa-solid fa-scissors"></i> Trim Video Online
+                            </a>
+                            <a id="cloudDlAudioBtn" href="#" target="_blank" class="cloud-action-btn btn-audio">
+                                <i class="fa-solid fa-music"></i> Download MP3 Audio
+                            </a>
+                            <a id="cloudDlVideoBtn" href="#" target="_blank" class="cloud-action-btn btn-green">
+                                <i class="fa-solid fa-film"></i> Download Full Video
+                            </a>
+                        </div>
+
+                        <!-- Client-Side Instant Media Cutter -->
+                        <div class="local-trimmer-box">
+                            <p style="font-size: 0.8rem; color: #E2E8F0; margin-bottom: 0.4rem;">
+                                <i class="fa-solid fa-wand-magic-sparkles" style="color: #F59E0B;"></i> Or trim any audio file right now in your browser:
+                            </p>
+                            <label for="localAudioFileInput" class="cloud-action-btn" style="cursor: pointer; font-size: 0.8rem; padding: 0.45rem 0.8rem;">
+                                <i class="fa-solid fa-file-audio"></i> Select Audio to Cut
+                            </label>
+                            <input type="file" id="localAudioFileInput" accept="audio/*,video/*">
+                            <span id="localFileStatus" style="display: block; font-size: 0.75rem; color: #9CA3AF; margin-top: 0.4rem;">100% In-Browser &bull; Zero Server Required</span>
                         </div>
                     </div>
                 </div>
@@ -294,7 +393,7 @@
 
             <!-- Backend Server Settings Modal -->
             <div id="serverModal" class="modal-overlay hidden">
-                <div class="modal-card glass-panel" style="max-width: 480px;">
+                <div class="modal-card glass-panel" style="max-width: 500px;">
                     <button id="closeServerModalBtn" class="close-modal"><i class="fa-solid fa-xmark"></i></button>
                     <div class="modal-header">
                         <div class="status-icon-wrapper">
@@ -303,13 +402,14 @@
                         <h3>Backend Server Settings</h3>
                     </div>
                     <p style="color: #9CA3AF; font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.4;">
-                        When running on GitHub Pages, connect your HTTPS backend tunnel (e.g. localtunnel) or localhost for 1080p full rendering and 320kbps MP3 trimming.
+                        ClipTube PRO connects to an active backend server for full 1080p Lanczos video rendering and 320kbps MP3 slicing. When running on GitHub Pages, connect your HTTPS tunnel or public backend URL below.
                     </p>
                     <div style="margin-bottom: 1rem;">
                         <label style="display: block; font-size: 0.85rem; margin-bottom: 0.35rem; color: #F3F4F6;">Backend Server URL:</label>
                         <input type="text" id="backendUrlInput" placeholder="e.g. https://your-tunnel.loca.lt or http://localhost:8000" style="width: 100%; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); color: white; outline: none; font-size: 0.9rem;">
                     </div>
-                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
+                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                        <button id="resetBackendBtn" class="pill-badge" style="cursor: pointer;"><i class="fa-solid fa-rotate-left"></i> Default</button>
                         <button id="testBackendBtn" class="pill-badge" style="cursor: pointer;"><i class="fa-solid fa-network-wired"></i> Test Connection</button>
                         <button id="saveBackendBtn" class="primary-btn" style="padding: 0.6rem 1.2rem;"><i class="fa-solid fa-check"></i> Save</button>
                     </div>

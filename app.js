@@ -1,9 +1,9 @@
 // --------------------------------------------------------------------------
-// ClipTube PRO - Client Application Logic
+// ClipTube PRO - Client Application Engine
 // --------------------------------------------------------------------------
 
-// Default public backend for GitHub Pages & Localhost
-const DEFAULT_GITHUB_BACKEND = 'https://red-parents-cross.loca.lt';
+// Active default public backend tunnel for GitHub Pages & Remote devices
+const DEFAULT_GITHUB_BACKEND = 'https://modern-donkey-13.loca.lt';
 
 let API_BASE_URL = localStorage.getItem('cliptube_backend_url') || (
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -30,6 +30,7 @@ let deferredPrompt = null;
 let hasAutoDownloaded = false;
 let ytApiReady = false;
 let pendingVideoId = null;
+let isBackendOnline = false;
 
 const ytUrlInput = document.getElementById('ytUrlInput');
 const clearUrlBtn = document.getElementById('clearUrlBtn');
@@ -103,9 +104,14 @@ const downloadLinkBtn = document.getElementById('downloadLinkBtn');
 const fileSizeLabel = document.getElementById('fileSizeLabel');
 const audioPreviewBlock = document.getElementById('audioPreviewBlock');
 const audioPreviewElement = document.getElementById('audioPreviewElement');
+
 const fallbackCloudDlBlock = document.getElementById('fallbackCloudDlBlock');
-const cloudDlBtn1 = document.getElementById('cloudDlBtn1');
-const openConfigFromErrorBtn = document.getElementById('openConfigFromErrorBtn');
+const cloudClipSummary = document.getElementById('cloudClipSummary');
+const cloudTrimOnlineBtn = document.getElementById('cloudTrimOnlineBtn');
+const cloudDlAudioBtn = document.getElementById('cloudDlAudioBtn');
+const cloudDlVideoBtn = document.getElementById('cloudDlVideoBtn');
+const localAudioFileInput = document.getElementById('localAudioFileInput');
+const localFileStatus = document.getElementById('localFileStatus');
 
 const serverConfigBtn = document.getElementById('serverConfigBtn');
 const serverStatusText = document.getElementById('serverStatusText');
@@ -114,12 +120,12 @@ const closeServerModalBtn = document.getElementById('closeServerModalBtn');
 const backendUrlInput = document.getElementById('backendUrlInput');
 const testBackendBtn = document.getElementById('testBackendBtn');
 const saveBackendBtn = document.getElementById('saveBackendBtn');
+const resetBackendBtn = document.getElementById('resetBackendBtn');
 const backendTestResult = document.getElementById('backendTestResult');
 
 const historyList = document.getElementById('historyList');
 const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
 const sampleBtns = document.querySelectorAll('.sample-btn');
-
 const notifyBtn = document.getElementById('notifyBtn');
 const installAppBtn = document.getElementById('installAppBtn');
 
@@ -131,14 +137,19 @@ function checkBackendHealth() {
     })
     .then(r => {
         if (r.ok) {
-            serverStatusText.innerHTML = '<span style="color:#10B981;">● Server Active</span>';
+            isBackendOnline = true;
+            serverStatusText.innerHTML = '<span class="badge-active">● PRO Engine Active</span>';
             serverConfigBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
         } else {
-            serverStatusText.innerHTML = '<span style="color:#F59E0B;">● Server Setup</span>';
+            isBackendOnline = false;
+            serverStatusText.innerHTML = '<span class="badge-cloud">● Cloud Mode (Ready)</span>';
+            serverConfigBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
         }
     })
     .catch(() => {
-        serverStatusText.innerHTML = '<span style="color:#9CA3AF;">● Server Offline</span>';
+        isBackendOnline = false;
+        serverStatusText.innerHTML = '<span class="badge-cloud">● Cloud Mode (Ready)</span>';
+        serverConfigBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
     });
 }
 
@@ -150,12 +161,9 @@ serverConfigBtn.addEventListener('click', () => {
 
 closeServerModalBtn.addEventListener('click', () => serverModal.classList.add('hidden'));
 
-if (openConfigFromErrorBtn) {
-    openConfigFromErrorBtn.addEventListener('click', () => {
-        progressModal.classList.add('hidden');
-        backendUrlInput.value = API_BASE_URL;
-        backendTestResult.classList.add('hidden');
-        serverModal.classList.remove('hidden');
+if (resetBackendBtn) {
+    resetBackendBtn.addEventListener('click', () => {
+        backendUrlInput.value = DEFAULT_GITHUB_BACKEND;
     });
 }
 
@@ -172,15 +180,15 @@ testBackendBtn.addEventListener('click', async () => {
             signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
         });
         if (res.ok) {
-            backendTestResult.innerHTML = '<i class="fa-solid fa-circle-check"></i> Connection successful! Backend is online and ready.';
+            backendTestResult.innerHTML = '<i class="fa-solid fa-circle-check"></i> Connection successful! PRO Server is online and ready.';
             backendTestResult.style.color = '#10B981';
         } else {
-            backendTestResult.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Server returned HTTP ${res.status}.`;
+            backendTestResult.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Server responded with status ${res.status}.`;
             backendTestResult.style.color = '#F59E0B';
         }
     } catch (e) {
-        backendTestResult.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Cannot reach server. Please check the URL or tunnel status.`;
-        backendTestResult.style.color = '#EF4444';
+        backendTestResult.innerHTML = `<i class="fa-solid fa-circle-info"></i> Server unreachable. Cloud mode will be used automatically.`;
+        backendTestResult.style.color = '#38BDF8';
     }
 });
 
@@ -305,7 +313,7 @@ function formatSecondsToTimestamp(totalSeconds, forceHours = true) {
 
 function extractYouTubeId(url) {
     if (!url) return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|live\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|live\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.trim().match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
 }
@@ -331,7 +339,7 @@ function applyModeSettings() {
             qualityGroup.classList.remove('hidden');
             qualityLabel.innerHTML = '<i class="fa-solid fa-sliders"></i> Audio Bitrate';
             qualitySelect.innerHTML = `
-                <option value="best" selected>320 kbps (High Quality Studio)</option>
+                <option value="best" selected>320 kbps (Studio Master)</option>
                 <option value="256k">256 kbps (High)</option>
                 <option value="192k">192 kbps (Standard)</option>
                 <option value="128k">128 kbps (Compact)</option>
@@ -484,7 +492,7 @@ unlockStreamRangeBtn.addEventListener('click', () => {
     alert('Unlocked 12-Hour Live Stream Timeline! You can set timestamps up to 12:00:00.');
 });
 
-// --- Metadata Fetcher ---
+// --- Metadata Fetcher (Dual Backend + Public oEmbed Fallback) ---
 function fetchVideoData(url) {
     if (!url || !url.trim()) {
         alert('Please paste a valid YouTube video or live stream link.');
@@ -502,7 +510,7 @@ function fetchVideoData(url) {
     currentVideoData = { id: videoId, url: cleanUrl, duration: 0 };
 
     mainWorkspace.classList.remove('hidden');
-    videoTitle.textContent = 'Loading title...';
+    videoTitle.textContent = 'Loading video title...';
     videoUploader.innerHTML = '<i class="fa-solid fa-user"></i> YouTube Channel';
     videoThumb.src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
@@ -510,31 +518,40 @@ function fetchVideoData(url) {
     loadYouTubePlayer(videoId);
     mainWorkspace.scrollIntoView({ behavior: 'smooth' });
 
+    // Step 1: Try server API
     fetch(getApiUrl('/api/info'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
         body: JSON.stringify({ url: cleanUrl }),
-        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+        signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
     })
     .then(r => r.ok ? r.json() : null)
     .then(data => {
-        if (!data) return;
-        if (data.title && data.title !== 'YouTube Video') {
+        if (data && data.title && data.title !== 'YouTube Video') {
             videoTitle.textContent = data.title;
+            if (data.uploader) videoUploader.innerHTML = `<i class="fa-solid fa-user"></i> ${data.uploader}`;
+            if (data.duration && data.duration > 0) setVideoDuration(data.duration);
+            if (data.is_live) liveStatusTag.classList.remove('hidden');
+            if (data.thumbnail) videoThumb.src = data.thumbnail;
+        } else {
+            fallbackOEmbed(videoId);
+        }
+    })
+    .catch(() => {
+        fallbackOEmbed(videoId);
+    });
+}
+
+function fallbackOEmbed(videoId) {
+    const oembedUrl = `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`;
+    fetch(oembedUrl)
+    .then(r => r.json())
+    .then(d => {
+        if (d && d.title) {
+            videoTitle.textContent = d.title;
+            videoUploader.innerHTML = `<i class="fa-solid fa-user"></i> ${d.author_name || 'YouTube Channel'}`;
         } else {
             videoTitle.textContent = 'YouTube Video';
-        }
-        if (data.uploader) {
-            videoUploader.innerHTML = `<i class="fa-solid fa-user"></i> ${data.uploader}`;
-        }
-        if (data.duration && data.duration > 0) {
-            setVideoDuration(data.duration);
-        }
-        if (data.is_live) {
-            liveStatusTag.classList.remove('hidden');
-        }
-        if (data.thumbnail) {
-            videoThumb.src = data.thumbnail;
         }
     })
     .catch(() => {
@@ -674,7 +691,7 @@ async function startProcessing() {
     hasAutoDownloaded = false;
     progressModal.classList.remove('hidden');
     downloadResult.classList.add('hidden');
-    if (fallbackCloudDlBlock) fallbackCloudDlBlock.classList.add('hidden');
+    fallbackCloudDlBlock.classList.add('hidden');
     if (audioPreviewBlock) audioPreviewBlock.classList.add('hidden');
     if (audioPreviewElement) {
         audioPreviewElement.pause();
@@ -687,13 +704,11 @@ async function startProcessing() {
         : (audio_only ? "Trimming Audio Segment..." : "Trimming Video Segment...");
     progressBarFill.style.width = "10%";
     progressPct.textContent = "10%";
-    progressMessage.textContent = "Connecting to downloader engine...";
-    etaTimeText.textContent = "~8s remaining";
+    progressMessage.textContent = "Connecting to processing engine...";
+    etaTimeText.textContent = "~6s remaining";
 
-    // Setup direct cloud fallback buttons in case backend is offline
-    if (cloudDlBtn1 && videoId) {
-        cloudDlBtn1.href = `https://www.y2mate.com/youtube/${videoId}`;
-    }
+    // Setup direct cloud fallback links
+    setupCloudHubLinks(videoId, start_time, end_time);
 
     try {
         const response = await fetch(getApiUrl('/api/trim'), {
@@ -708,7 +723,7 @@ async function startProcessing() {
                 audio_only,
                 is_full_download
             }),
-            signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+            signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined
         });
 
         if (!response.ok) {
@@ -723,17 +738,38 @@ async function startProcessing() {
         pollTimer = setInterval(pollTaskStatus, 1000);
 
     } catch (err) {
-        statusIcon.className = "fa-solid fa-triangle-exclamation";
-        statusTitle.textContent = "Backend Connection Notice";
-        progressMessage.textContent = "Backend server offline or tunnel disconnected.";
-        progressBarFill.style.width = "0%";
-        progressPct.textContent = "0%";
-        etaTimeText.textContent = "Offline";
-        
-        if (fallbackCloudDlBlock) {
-            fallbackCloudDlBlock.classList.remove('hidden');
-        }
+        // Smoothly activate Cloud Hub instead of failing
+        activateCloudHubFallback(start_time, end_time);
     }
+}
+
+function setupCloudHubLinks(videoId, start_time, end_time) {
+    if (!videoId) return;
+    const sSec = parseTimeToSec(start_time);
+    const eSec = parseTimeToSec(end_time);
+
+    cloudClipSummary.innerHTML = `Selected range: <strong style="color:#10B981;">${start_time}</strong> ➜ <strong style="color:#10B981;">${end_time}</strong> (${formatSecondsToTimestamp(Math.max(1, eSec - sSec), false)})`;
+    cloudTrimOnlineBtn.href = `https://ytcutter.com/#${videoId}`;
+    cloudDlAudioBtn.href = `https://www.y2mate.com/youtube-mp3/${videoId}`;
+    cloudDlVideoBtn.href = `https://www.y2mate.com/youtube/${videoId}`;
+}
+
+function activateCloudHubFallback(start_time, end_time) {
+    statusIcon.className = "fa-solid fa-cloud-arrow-down";
+    statusTitle.textContent = "Universal Cloud Trimmer Hub Ready";
+    progressMessage.textContent = "Ready to download and trim via fast cloud engines.";
+    progressBarFill.style.width = "100%";
+    progressPct.textContent = "100%";
+    etaTimeText.textContent = "Ready";
+    fallbackCloudDlBlock.classList.remove('hidden');
+}
+
+function parseTimeToSec(str) {
+    if (!str) return 0;
+    const parts = str.split(':').map(Number);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    return parts[0] || 0;
 }
 
 async function pollTaskStatus() {
@@ -808,17 +844,105 @@ async function pollTaskStatus() {
         } else if (data.status === 'error') {
             clearInterval(pollTimer);
             pollTimer = null;
-
-            statusIcon.className = "fa-solid fa-circle-xmark";
-            statusTitle.textContent = "Processing Notice";
-            progressMessage.textContent = data.message;
-            etaTimeText.textContent = "Failed";
-
-            if (fallbackCloudDlBlock) {
-                fallbackCloudDlBlock.classList.remove('hidden');
-            }
+            activateCloudHubFallback(getStartFormatted(), getEndFormatted());
         }
-    } catch (e) {}
+    } catch (e) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        activateCloudHubFallback(getStartFormatted(), getEndFormatted());
+    }
+}
+
+// --- In-Browser Web Audio Trimmer (Zero-Server Audio Slicing) ---
+if (localAudioFileInput) {
+    localAudioFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        localFileStatus.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Decoding ${file.name}...`;
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+            const startSec = getStartTotalSeconds();
+            const endSec = Math.min(getEndTotalSeconds(), audioBuffer.duration);
+
+            if (endSec <= startSec) {
+                alert('Please check your start and end timestamps. End time must be after start time.');
+                localFileStatus.textContent = 'Trimming cancelled (check timestamps).';
+                return;
+            }
+
+            localFileStatus.innerHTML = `<i class="fa-solid fa-scissors"></i> Slicing ${formatSecondsToTimestamp(endSec - startSec, false)}...`;
+
+            // Encode to standard WAV
+            const wavBlob = audioBufferToWav(audioBuffer, startSec, endSec);
+            const blobUrl = URL.createObjectURL(wavBlob);
+
+            const dl = document.createElement('a');
+            dl.href = blobUrl;
+            dl.download = `trimmed_${file.name.replace(/\.[^/.]+$/, "")}_clip.wav`;
+            document.body.appendChild(dl);
+            dl.click();
+            document.body.removeChild(dl);
+
+            localFileStatus.innerHTML = `<span style="color:#10B981;"><i class="fa-solid fa-circle-check"></i> Trimmed ${formatSecondsToTimestamp(endSec - startSec, false)} saved to device!</span>`;
+            
+            if (audioPreviewBlock && audioPreviewElement) {
+                audioPreviewElement.src = blobUrl;
+                audioPreviewBlock.classList.remove('hidden');
+                audioPreviewElement.load();
+                audioPreviewElement.play().catch(() => {});
+            }
+        } catch (err) {
+            console.error('Audio slice error:', err);
+            localFileStatus.innerHTML = `<span style="color:#EF4444;"><i class="fa-solid fa-triangle-exclamation"></i> Error decoding audio file.</span>`;
+        }
+    });
+}
+
+function audioBufferToWav(buffer, startSec, endSec) {
+    const sampleRate = buffer.sampleRate;
+    const numChannels = buffer.numberOfChannels;
+    const startOffset = Math.floor(startSec * sampleRate);
+    const endOffset = Math.min(buffer.length, Math.floor(endSec * sampleRate));
+    const frameCount = Math.max(0, endOffset - startOffset);
+
+    const wavBuffer = new ArrayBuffer(44 + frameCount * numChannels * 2);
+    const view = new DataView(wavBuffer);
+
+    function writeString(v, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            v.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + frameCount * numChannels * 2, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true);
+    view.setUint16(32, numChannels * 2, true);
+    view.setUint16(34, 16, true); // 16-bit
+    writeString(view, 36, 'data');
+    view.setUint32(40, frameCount * numChannels * 2, true);
+
+    let offset = 44;
+    for (let i = 0; i < frameCount; i++) {
+        for (let channel = 0; channel < numChannels; channel++) {
+            const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[startOffset + i]));
+            const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+            view.setInt16(offset, intSample, true);
+            offset += 2;
+        }
+    }
+    return new Blob([view], { type: 'audio/wav' });
 }
 
 // --- History Renderer ---

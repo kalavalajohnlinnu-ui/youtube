@@ -1,20 +1,24 @@
-// Dynamic Backend Resolver for GitHub Pages and Localhost
+// --------------------------------------------------------------------------
+// ClipTube PRO - Client Application Engine
+// --------------------------------------------------------------------------
+
+// Active default public backend tunnel for GitHub Pages & Remote devices
+const DEFAULT_GITHUB_BACKEND = 'https://modern-donkey-13.loca.lt';
+
 let API_BASE_URL = localStorage.getItem('cliptube_backend_url') || (
-    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? '' 
-        : 'http://localhost:8000'
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? ''
+        : DEFAULT_GITHUB_BACKEND
 );
 
 function getApiUrl(path) {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
     if (!API_BASE_URL) return path;
     const cleanBase = API_BASE_URL.replace(/\/+$/, '');
     const cleanPath = path.startsWith('/') ? path : '/' + path;
     return cleanBase + cleanPath;
 }
-
-// --------------------------------------------------------------------------
-// ClipTube PRO - Client Application Logic
-// --------------------------------------------------------------------------
 
 let ytPlayer = null;
 let currentVideoData = null;
@@ -24,8 +28,9 @@ let playerTimeInterval = null;
 let activeMode = 'trim-video';
 let deferredPrompt = null;
 let hasAutoDownloaded = false;
-let ytApiReady = false;       // true once YouTube IFrame API has loaded
-let pendingVideoId = null;    // holds a video ID if Load Video clicked before API ready
+let ytApiReady = false;
+let pendingVideoId = null;
+let isBackendOnline = false;
 
 const ytUrlInput = document.getElementById('ytUrlInput');
 const clearUrlBtn = document.getElementById('clearUrlBtn');
@@ -81,6 +86,7 @@ const currentEndPreview = document.getElementById('currentEndPreview');
 
 const formatSelect = document.getElementById('formatSelect');
 const qualityGroup = document.getElementById('qualityGroup');
+const qualityLabel = document.getElementById('qualityLabel');
 const qualitySelect = document.getElementById('qualitySelect');
 const startTrimBtn = document.getElementById('startTrimBtn');
 const ctaBtnText = document.getElementById('ctaBtnText');
@@ -96,26 +102,114 @@ const etaTimeText = document.getElementById('etaTimeText');
 const downloadResult = document.getElementById('downloadResult');
 const downloadLinkBtn = document.getElementById('downloadLinkBtn');
 const fileSizeLabel = document.getElementById('fileSizeLabel');
+const audioPreviewBlock = document.getElementById('audioPreviewBlock');
+const audioPreviewElement = document.getElementById('audioPreviewElement');
+
+const fallbackCloudDlBlock = document.getElementById('fallbackCloudDlBlock');
+const cloudClipSummary = document.getElementById('cloudClipSummary');
+const cloudTrimOnlineBtn = document.getElementById('cloudTrimOnlineBtn');
+const cloudDlAudioBtn = document.getElementById('cloudDlAudioBtn');
+const cloudDlVideoBtn = document.getElementById('cloudDlVideoBtn');
+const localAudioFileInput = document.getElementById('localAudioFileInput');
+const localFileStatus = document.getElementById('localFileStatus');
+
+const serverConfigBtn = document.getElementById('serverConfigBtn');
+const serverStatusText = document.getElementById('serverStatusText');
+const serverModal = document.getElementById('serverModal');
+const closeServerModalBtn = document.getElementById('closeServerModalBtn');
+const backendUrlInput = document.getElementById('backendUrlInput');
+const testBackendBtn = document.getElementById('testBackendBtn');
+const saveBackendBtn = document.getElementById('saveBackendBtn');
+const resetBackendBtn = document.getElementById('resetBackendBtn');
+const backendTestResult = document.getElementById('backendTestResult');
 
 const historyList = document.getElementById('historyList');
 const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
 const sampleBtns = document.querySelectorAll('.sample-btn');
-
 const notifyBtn = document.getElementById('notifyBtn');
 const installAppBtn = document.getElementById('installAppBtn');
 
+// --- Server Settings Modal & Connectivity Check ---
+function checkBackendHealth() {
+    fetch(getApiUrl('/api/history'), {
+        headers: { 'Bypass-Tunnel-Reminder': 'true' },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
+    })
+    .then(r => {
+        if (r.ok) {
+            isBackendOnline = true;
+            serverStatusText.innerHTML = '<span class="badge-active">● PRO Engine Active</span>';
+            serverConfigBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        } else {
+            isBackendOnline = false;
+            serverStatusText.innerHTML = '<span class="badge-cloud">● Cloud Mode (Ready)</span>';
+            serverConfigBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+        }
+    })
+    .catch(() => {
+        isBackendOnline = false;
+        serverStatusText.innerHTML = '<span class="badge-cloud">● Cloud Mode (Ready)</span>';
+        serverConfigBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+    });
+}
+
+serverConfigBtn.addEventListener('click', () => {
+    backendUrlInput.value = API_BASE_URL;
+    backendTestResult.classList.add('hidden');
+    serverModal.classList.remove('hidden');
+});
+
+closeServerModalBtn.addEventListener('click', () => serverModal.classList.add('hidden'));
+
+if (resetBackendBtn) {
+    resetBackendBtn.addEventListener('click', () => {
+        backendUrlInput.value = DEFAULT_GITHUB_BACKEND;
+    });
+}
+
+testBackendBtn.addEventListener('click', async () => {
+    const testUrl = backendUrlInput.value.trim().replace(/\/+$/, '');
+    backendTestResult.classList.remove('hidden');
+    backendTestResult.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Testing connection...';
+    backendTestResult.style.color = 'var(--text-muted)';
+
+    try {
+        const pingUrl = (testUrl ? testUrl : '') + '/api/history';
+        const res = await fetch(pingUrl, {
+            headers: { 'Bypass-Tunnel-Reminder': 'true' },
+            signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
+        });
+        if (res.ok) {
+            backendTestResult.innerHTML = '<i class="fa-solid fa-circle-check"></i> Connection successful! PRO Server is online and ready.';
+            backendTestResult.style.color = '#10B981';
+        } else {
+            backendTestResult.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Server responded with status ${res.status}.`;
+            backendTestResult.style.color = '#F59E0B';
+        }
+    } catch (e) {
+        backendTestResult.innerHTML = `<i class="fa-solid fa-circle-info"></i> Server unreachable. Cloud mode will be used automatically.`;
+        backendTestResult.style.color = '#38BDF8';
+    }
+});
+
+saveBackendBtn.addEventListener('click', () => {
+    const newUrl = backendUrlInput.value.trim().replace(/\/+$/, '');
+    API_BASE_URL = newUrl;
+    localStorage.setItem('cliptube_backend_url', newUrl);
+    serverModal.classList.add('hidden');
+    checkBackendHealth();
+    fetchHistory();
+});
+
 // --- YouTube IFrame API Ready Callback ---
-// This MUST be a global function — YouTube calls it automatically when the API script loads.
 window.onYouTubeIframeAPIReady = function() {
     ytApiReady = true;
-    // If the user already clicked Load Video while the API was still loading, create player now
     if (pendingVideoId) {
         createYTPlayer(pendingVideoId);
         pendingVideoId = null;
     }
 };
 
-// Edge case: YT API may have already loaded before app.js ran (e.g. from cache)
 if (window.YT && window.YT.Player) {
     ytApiReady = true;
 }
@@ -219,7 +313,7 @@ function formatSecondsToTimestamp(totalSeconds, forceHours = true) {
 
 function extractYouTubeId(url) {
     if (!url) return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|live\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|live\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.trim().match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
 }
@@ -235,32 +329,74 @@ modeTabs.forEach(tab => {
 });
 
 function applyModeSettings() {
+    const isAudio = (activeMode === 'trim-audio' || activeMode === 'full-audio');
+    
+    if (isAudio) {
+        if (!['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(formatSelect.value)) {
+            formatSelect.value = 'mp3';
+        }
+        if (qualityGroup && qualityLabel && qualitySelect) {
+            qualityGroup.classList.remove('hidden');
+            qualityLabel.innerHTML = '<i class="fa-solid fa-sliders"></i> Audio Bitrate';
+            qualitySelect.innerHTML = `
+                <option value="best" selected>320 kbps (Studio Master)</option>
+                <option value="256k">256 kbps (High)</option>
+                <option value="192k">192 kbps (Standard)</option>
+                <option value="128k">128 kbps (Compact)</option>
+            `;
+        }
+    } else {
+        if (['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(formatSelect.value)) {
+            formatSelect.value = 'mp4';
+        }
+        if (qualityGroup && qualityLabel && qualitySelect) {
+            qualityGroup.classList.remove('hidden');
+            qualityLabel.innerHTML = '<i class="fa-solid fa-film"></i> Video Quality';
+            qualitySelect.innerHTML = `
+                <option value="best" selected>Best Available (Highest)</option>
+                <option value="1080p">1080p Full HD</option>
+                <option value="720p">720p HD</option>
+                <option value="480p">480p SD</option>
+            `;
+        }
+    }
+
     if (activeMode === 'trim-video') {
         trimmerControlsSection.classList.remove('hidden');
         quickCutToolbar.classList.remove('hidden');
-        formatSelect.value = 'mp4';
-        qualityGroup.classList.remove('hidden');
         ctaBtnText.textContent = "Cut & Download Video Segment";
     } else if (activeMode === 'trim-audio') {
         trimmerControlsSection.classList.remove('hidden');
         quickCutToolbar.classList.remove('hidden');
-        formatSelect.value = 'mp3';
-        qualityGroup.classList.add('hidden');
         ctaBtnText.textContent = "Cut & Download MP3 Audio";
     } else if (activeMode === 'full-video') {
         trimmerControlsSection.classList.add('hidden');
         quickCutToolbar.classList.add('hidden');
-        formatSelect.value = 'mp4';
-        qualityGroup.classList.remove('hidden');
         ctaBtnText.textContent = "Download Full Video";
     } else if (activeMode === 'full-audio') {
         trimmerControlsSection.classList.add('hidden');
         quickCutToolbar.classList.add('hidden');
-        formatSelect.value = 'mp3';
-        qualityGroup.classList.add('hidden');
         ctaBtnText.textContent = "Download Full MP3 Audio";
     }
 }
+
+formatSelect.addEventListener('change', () => {
+    const isAudio = ['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(formatSelect.value);
+    if (isAudio && activeMode === 'trim-video') {
+        activeMode = 'trim-audio';
+        modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === 'trim-audio'));
+    } else if (!isAudio && activeMode === 'trim-audio') {
+        activeMode = 'trim-video';
+        modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === 'trim-video'));
+    } else if (isAudio && activeMode === 'full-video') {
+        activeMode = 'full-audio';
+        modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === 'full-audio'));
+    } else if (!isAudio && activeMode === 'full-audio') {
+        activeMode = 'full-video';
+        modeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === 'full-video'));
+    }
+    applyModeSettings();
+});
 
 // --- YouTube IFrame API ---
 function loadYouTubePlayer(videoId) {
@@ -268,20 +404,16 @@ function loadYouTubePlayer(videoId) {
     playerPlaceholder.classList.add('hidden');
 
     if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
-        // Player already exists — just swap the video
         try { ytPlayer.loadVideoById(videoId); } catch (e) { console.error('loadVideoById error:', e); }
     } else if (ytApiReady || (window.YT && window.YT.Player)) {
-        // API is ready (either via our flag or window.YT direct check)
         ytApiReady = true;
         createYTPlayer(videoId);
     } else {
-        // API not ready yet — queue it; onYouTubeIframeAPIReady will pick it up
         pendingVideoId = videoId;
     }
 }
 
 function createYTPlayer(videoId) {
-    // Reset the div because YT replaces it in-place
     ytPlayerContainer.innerHTML = '<div id="ytIframe"></div>';
     ytPlayer = new YT.Player('ytIframe', {
         videoId: videoId,
@@ -360,7 +492,7 @@ unlockStreamRangeBtn.addEventListener('click', () => {
     alert('Unlocked 12-Hour Live Stream Timeline! You can set timestamps up to 12:00:00.');
 });
 
-// --- Metadata Fetcher ---
+// --- Metadata Fetcher (Dual Backend + Public oEmbed Fallback) ---
 function fetchVideoData(url) {
     if (!url || !url.trim()) {
         alert('Please paste a valid YouTube video or live stream link.');
@@ -375,53 +507,57 @@ function fetchVideoData(url) {
         return;
     }
 
-    // ── INSTANT: show workspace & load player immediately, NO server call needed ──
     currentVideoData = { id: videoId, url: cleanUrl, duration: 0 };
 
     mainWorkspace.classList.remove('hidden');
-    videoTitle.textContent = 'Loading title...';
+    videoTitle.textContent = 'Loading video title...';
     videoUploader.innerHTML = '<i class="fa-solid fa-user"></i> YouTube Channel';
     videoThumb.src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
-    // Default 3-hour timeline; player's onReady will report real duration
     setVideoDuration(3 * 3600);
     loadYouTubePlayer(videoId);
     mainWorkspace.scrollIntoView({ behavior: 'smooth' });
 
-    // ── BACKGROUND: quietly fetch title/uploader from server (never blocks UI) ──
+    // Step 1: Try server API
     fetch(getApiUrl('/api/info'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
         body: JSON.stringify({ url: cleanUrl }),
-        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+        signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
     })
     .then(r => r.ok ? r.json() : null)
     .then(data => {
-        if (!data) return;
-        if (data.title && data.title !== 'YouTube Video') {
+        if (data && data.title && data.title !== 'YouTube Video') {
             videoTitle.textContent = data.title;
+            if (data.uploader) videoUploader.innerHTML = `<i class="fa-solid fa-user"></i> ${data.uploader}`;
+            if (data.duration && data.duration > 0) setVideoDuration(data.duration);
+            if (data.is_live) liveStatusTag.classList.remove('hidden');
+            if (data.thumbnail) videoThumb.src = data.thumbnail;
         } else {
-            videoTitle.textContent = 'YouTube Video';
-        }
-        if (data.uploader) {
-            videoUploader.innerHTML = `<i class="fa-solid fa-user"></i> ${data.uploader}`;
-        }
-        if (data.duration && data.duration > 0) {
-            setVideoDuration(data.duration);
-        }
-        if (data.is_live) {
-            liveStatusTag.classList.remove('hidden');
-        }
-        if (data.thumbnail) {
-            videoThumb.src = data.thumbnail;
+            fallbackOEmbed(videoId);
         }
     })
     .catch(() => {
-        // silently ignore — player already loaded anyway
-        videoTitle.textContent = 'YouTube Video';
+        fallbackOEmbed(videoId);
     });
 }
 
+function fallbackOEmbed(videoId) {
+    const oembedUrl = `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`;
+    fetch(oembedUrl)
+    .then(r => r.json())
+    .then(d => {
+        if (d && d.title) {
+            videoTitle.textContent = d.title;
+            videoUploader.innerHTML = `<i class="fa-solid fa-user"></i> ${d.author_name || 'YouTube Channel'}`;
+        } else {
+            videoTitle.textContent = 'YouTube Video';
+        }
+    })
+    .catch(() => {
+        videoTitle.textContent = 'YouTube Video';
+    });
+}
 
 // --- Sliders & Timeline ---
 function updateTimelineUI() {
@@ -521,14 +657,6 @@ previewSegmentBtn.addEventListener('click', () => {
     }
 });
 
-formatSelect.addEventListener('change', () => {
-    if (formatSelect.value === 'mp3') {
-        qualityGroup.classList.add('hidden');
-    } else {
-        qualityGroup.classList.remove('hidden');
-    }
-});
-
 // --- Automatic Download Execution & Task Polling ---
 async function startProcessing() {
     const url = ytUrlInput.value.trim();
@@ -537,10 +665,11 @@ async function startProcessing() {
         return;
     }
 
+    const videoId = extractYouTubeId(url);
     const format = formatSelect.value;
     const quality = qualitySelect.value;
     const is_full_download = (activeMode === 'full-video' || activeMode === 'full-audio');
-    const audio_only = (activeMode === 'trim-audio' || activeMode === 'full-audio' || format === 'mp3');
+    const audio_only = (activeMode === 'trim-audio' || activeMode === 'full-audio' || ['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(format));
 
     let start_time = getStartFormatted();
     let end_time = getEndFormatted();
@@ -562,17 +691,29 @@ async function startProcessing() {
     hasAutoDownloaded = false;
     progressModal.classList.remove('hidden');
     downloadResult.classList.add('hidden');
+    fallbackCloudDlBlock.classList.add('hidden');
+    if (audioPreviewBlock) audioPreviewBlock.classList.add('hidden');
+    if (audioPreviewElement) {
+        audioPreviewElement.pause();
+        audioPreviewElement.src = '';
+    }
+
     statusIcon.className = "fa-solid fa-gear fa-spin";
-    statusTitle.textContent = is_full_download ? "Downloading Full Media..." : "Processing Clip Segment...";
+    statusTitle.textContent = is_full_download 
+        ? (audio_only ? "Downloading Full Audio..." : "Downloading Full Video...") 
+        : (audio_only ? "Trimming Audio Segment..." : "Trimming Video Segment...");
     progressBarFill.style.width = "10%";
     progressPct.textContent = "10%";
-    progressMessage.textContent = "Connecting to downloader engine...";
-    etaTimeText.textContent = "~8s remaining";
+    progressMessage.textContent = "Connecting to processing engine...";
+    etaTimeText.textContent = "~6s remaining";
+
+    // Setup direct cloud fallback links
+    setupCloudHubLinks(videoId, start_time, end_time);
 
     try {
         const response = await fetch(getApiUrl('/api/trim'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
             body: JSON.stringify({
                 url,
                 start_time,
@@ -581,12 +722,13 @@ async function startProcessing() {
                 quality,
                 audio_only,
                 is_full_download
-            })
+            }),
+            signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined
         });
 
         if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.detail || 'Failed to start processing task');
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.detail || 'Backend processing error');
         }
 
         const data = await response.json();
@@ -596,20 +738,47 @@ async function startProcessing() {
         pollTimer = setInterval(pollTaskStatus, 1000);
 
     } catch (err) {
-        statusIcon.className = "fa-solid fa-triangle-exclamation";
-        statusTitle.textContent = "Processing Error";
-        progressMessage.textContent = err.message;
-        progressBarFill.style.width = "0%";
-        progressPct.textContent = "0%";
-        etaTimeText.textContent = "Error";
+        // Smoothly activate Cloud Hub instead of failing
+        activateCloudHubFallback(start_time, end_time);
     }
+}
+
+function setupCloudHubLinks(videoId, start_time, end_time) {
+    if (!videoId) return;
+    const sSec = parseTimeToSec(start_time);
+    const eSec = parseTimeToSec(end_time);
+
+    cloudClipSummary.innerHTML = `Selected range: <strong style="color:#10B981;">${start_time}</strong> ➜ <strong style="color:#10B981;">${end_time}</strong> (${formatSecondsToTimestamp(Math.max(1, eSec - sSec), false)})`;
+    cloudTrimOnlineBtn.href = `https://ytcutter.com/#${videoId}`;
+    cloudDlAudioBtn.href = `https://www.y2mate.com/youtube-mp3/${videoId}`;
+    cloudDlVideoBtn.href = `https://www.y2mate.com/youtube/${videoId}`;
+}
+
+function activateCloudHubFallback(start_time, end_time) {
+    statusIcon.className = "fa-solid fa-cloud-arrow-down";
+    statusTitle.textContent = "Universal Cloud Trimmer Hub Ready";
+    progressMessage.textContent = "Ready to download and trim via fast cloud engines.";
+    progressBarFill.style.width = "100%";
+    progressPct.textContent = "100%";
+    etaTimeText.textContent = "Ready";
+    fallbackCloudDlBlock.classList.remove('hidden');
+}
+
+function parseTimeToSec(str) {
+    if (!str) return 0;
+    const parts = str.split(':').map(Number);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    return parts[0] || 0;
 }
 
 async function pollTaskStatus() {
     if (!activeTaskId) return;
 
     try {
-        const response = await fetch(getApiUrl(`/api/status/${activeTaskId}`));
+        const response = await fetch(getApiUrl(`/api/status/${activeTaskId}`), {
+            headers: { 'Bypass-Tunnel-Reminder': 'true' }
+        });
         if (!response.ok) return;
 
         const data = await response.json();
@@ -631,40 +800,157 @@ async function pollTaskStatus() {
             statusIcon.className = "fa-solid fa-circle-check";
             statusTitle.textContent = "Media Ready!";
             downloadResult.classList.remove('hidden');
-            downloadLinkBtn.href = data.download_url;
+            
+            const resolvedDownloadUrl = getApiUrl(data.download_url);
+            downloadLinkBtn.href = resolvedDownloadUrl;
             fileSizeLabel.textContent = `${data.file_size_mb} MB`;
             etaTimeText.textContent = "Done!";
 
+            // In-browser Audio Player Preview
+            const isAudioFile = data.filename && (
+                data.filename.endsWith('.mp3') || 
+                data.filename.endsWith('.m4a') || 
+                data.filename.endsWith('.wav') || 
+                data.filename.endsWith('.aac') || 
+                data.filename.endsWith('.flac') || 
+                data.filename.endsWith('.ogg')
+            );
+            
+            if (audioPreviewBlock && audioPreviewElement) {
+                if (isAudioFile) {
+                    audioPreviewElement.src = resolvedDownloadUrl;
+                    audioPreviewBlock.classList.remove('hidden');
+                    audioPreviewElement.load();
+                } else {
+                    audioPreviewBlock.classList.add('hidden');
+                    audioPreviewElement.pause();
+                }
+            }
+
             // INSTANT AUTOMATIC FILE DOWNLOAD
-            if (!hasAutoDownloaded && data.download_url) {
+            if (!hasAutoDownloaded && resolvedDownloadUrl) {
                 hasAutoDownloaded = true;
                 const autoLink = document.createElement('a');
-                autoLink.href = data.download_url;
-                autoLink.download = data.filename || 'clip.mp4';
+                autoLink.href = resolvedDownloadUrl;
+                autoLink.download = data.filename || 'clip';
                 document.body.appendChild(autoLink);
                 autoLink.click();
                 document.body.removeChild(autoLink);
             }
 
-            sendDesktopNotification("ClipTube PRO - Download Ready!", `Your file ${data.filename} (${data.file_size_mb} MB) was automatically downloaded.`);
+            sendDesktopNotification("ClipTube PRO - Download Ready!", `Your file ${data.filename} (${data.file_size_mb} MB) is ready.`);
 
             fetchHistory();
         } else if (data.status === 'error') {
             clearInterval(pollTimer);
             pollTimer = null;
-
-            statusIcon.className = "fa-solid fa-circle-xmark";
-            statusTitle.textContent = "Processing Error";
-            progressMessage.textContent = data.message;
-            etaTimeText.textContent = "Failed";
+            activateCloudHubFallback(getStartFormatted(), getEndFormatted());
         }
-    } catch (e) {}
+    } catch (e) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        activateCloudHubFallback(getStartFormatted(), getEndFormatted());
+    }
+}
+
+// --- In-Browser Web Audio Trimmer (Zero-Server Audio Slicing) ---
+if (localAudioFileInput) {
+    localAudioFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        localFileStatus.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Decoding ${file.name}...`;
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+            const startSec = getStartTotalSeconds();
+            const endSec = Math.min(getEndTotalSeconds(), audioBuffer.duration);
+
+            if (endSec <= startSec) {
+                alert('Please check your start and end timestamps. End time must be after start time.');
+                localFileStatus.textContent = 'Trimming cancelled (check timestamps).';
+                return;
+            }
+
+            localFileStatus.innerHTML = `<i class="fa-solid fa-scissors"></i> Slicing ${formatSecondsToTimestamp(endSec - startSec, false)}...`;
+
+            // Encode to standard WAV
+            const wavBlob = audioBufferToWav(audioBuffer, startSec, endSec);
+            const blobUrl = URL.createObjectURL(wavBlob);
+
+            const dl = document.createElement('a');
+            dl.href = blobUrl;
+            dl.download = `trimmed_${file.name.replace(/\.[^/.]+$/, "")}_clip.wav`;
+            document.body.appendChild(dl);
+            dl.click();
+            document.body.removeChild(dl);
+
+            localFileStatus.innerHTML = `<span style="color:#10B981;"><i class="fa-solid fa-circle-check"></i> Trimmed ${formatSecondsToTimestamp(endSec - startSec, false)} saved to device!</span>`;
+            
+            if (audioPreviewBlock && audioPreviewElement) {
+                audioPreviewElement.src = blobUrl;
+                audioPreviewBlock.classList.remove('hidden');
+                audioPreviewElement.load();
+                audioPreviewElement.play().catch(() => {});
+            }
+        } catch (err) {
+            console.error('Audio slice error:', err);
+            localFileStatus.innerHTML = `<span style="color:#EF4444;"><i class="fa-solid fa-triangle-exclamation"></i> Error decoding audio file.</span>`;
+        }
+    });
+}
+
+function audioBufferToWav(buffer, startSec, endSec) {
+    const sampleRate = buffer.sampleRate;
+    const numChannels = buffer.numberOfChannels;
+    const startOffset = Math.floor(startSec * sampleRate);
+    const endOffset = Math.min(buffer.length, Math.floor(endSec * sampleRate));
+    const frameCount = Math.max(0, endOffset - startOffset);
+
+    const wavBuffer = new ArrayBuffer(44 + frameCount * numChannels * 2);
+    const view = new DataView(wavBuffer);
+
+    function writeString(v, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            v.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + frameCount * numChannels * 2, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true);
+    view.setUint16(32, numChannels * 2, true);
+    view.setUint16(34, 16, true); // 16-bit
+    writeString(view, 36, 'data');
+    view.setUint32(40, frameCount * numChannels * 2, true);
+
+    let offset = 44;
+    for (let i = 0; i < frameCount; i++) {
+        for (let channel = 0; channel < numChannels; channel++) {
+            const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[startOffset + i]));
+            const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+            view.setInt16(offset, intSample, true);
+            offset += 2;
+        }
+    }
+    return new Blob([view], { type: 'audio/wav' });
 }
 
 // --- History Renderer ---
 async function fetchHistory() {
     try {
-        const res = await fetch(getApiUrl('/api/history'));
+        const res = await fetch(getApiUrl('/api/history'), {
+            headers: { 'Bypass-Tunnel-Reminder': 'true' }
+        });
         if (!res.ok) return;
         const data = await res.json();
 
@@ -673,7 +959,10 @@ async function fetchHistory() {
             return;
         }
 
-        historyList.innerHTML = data.history.map(item => `
+        historyList.innerHTML = data.history.map(item => {
+            const dlUrl = getApiUrl(item.download_url);
+            const isAudio = item.filename && (item.filename.endsWith('.mp3') || item.filename.endsWith('.m4a') || item.filename.endsWith('.wav'));
+            return `
             <div class="history-card">
                 <div class="history-card-header">
                     <div>
@@ -682,12 +971,14 @@ async function fetchHistory() {
                     </div>
                     <div class="history-time">${item.start_time} ➜ ${item.end_time}</div>
                 </div>
+                ${isAudio ? `<audio controls src="${dlUrl}" style="width:100%; height:32px; margin: 0.5rem 0; border-radius: 4px;"></audio>` : ''}
                 <div class="history-card-footer">
                     <span class="history-size">${item.size_mb} MB • ${item.created_at}</span>
-                    <a href="${item.download_url}" class="small-dl-btn" download><i class="fa-solid fa-download"></i> Save</a>
+                    <a href="${dlUrl}" class="small-dl-btn" download><i class="fa-solid fa-download"></i> Save</a>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
 
     } catch (e) {}
 }
@@ -711,7 +1002,10 @@ sampleBtns.forEach(btn => {
 });
 
 startTrimBtn.addEventListener('click', startProcessing);
-closeModalBtn.addEventListener('click', () => progressModal.classList.add('hidden'));
+closeModalBtn.addEventListener('click', () => {
+    progressModal.classList.add('hidden');
+    if (audioPreviewElement) audioPreviewElement.pause();
+});
 refreshHistoryBtn.addEventListener('click', fetchHistory);
 
 // Initial Load Setup
@@ -719,4 +1013,5 @@ if (getEndTotalSeconds() === 0) {
     setEndBoxFromSeconds(10);
 }
 applyModeSettings();
+checkBackendHealth();
 fetchHistory();

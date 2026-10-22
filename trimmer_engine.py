@@ -232,7 +232,7 @@ def _run_ytdlp_subprocess(cmd: list, progress_callback: Callable, clip_duration:
                 em = re.search(r'ETA\s+(\d+):(\d+)', line)
                 if em:
                     eta_s = int(em.group(1)) * 60 + int(em.group(2))
-                progress_callback(last_pct[0], f"Downloading Full HD... {raw:.1f}%", eta_seconds=eta_s)
+                progress_callback(last_pct[0], f"Downloading media stream... {raw:.1f}%", eta_seconds=eta_s)
                 continue
             if 'time=' in line and 'speed=' in line:
                 tm = re.search(r'time=(\d+:\d+:\d+[\.\d]*)', line)
@@ -250,7 +250,7 @@ def _run_ytdlp_subprocess(cmd: list, progress_callback: Callable, clip_duration:
             if '[Merger]' in line or 'Merging' in line:
                 progress_callback(88, "Merging high-quality audio + video tracks...", eta_seconds=5)
             elif '[ExtractAudio]' in line:
-                progress_callback(90, "Extracting high-bitrate audio track...", eta_seconds=4)
+                progress_callback(90, "Extracting pristine audio track (320kbps)...", eta_seconds=3)
 
     reader = threading.Thread(target=read_output, daemon=True)
     reader.start()
@@ -298,8 +298,8 @@ def run_trim_download(
     is_full_download: bool = False
 ) -> str:
     """
-    Downloads and trims a YouTube video segment with pristine visual quality
-    and 100% guaranteed compatible AAC stereo audio.
+    Downloads and trims a YouTube video or audio segment with pristine quality
+    and robust multi-stage fallbacks.
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -316,13 +316,12 @@ def run_trim_download(
     if not is_full_download and end_sec <= start_sec:
         raise ValueError("End time must be after start time.")
 
+    is_audio_mode = audio_only or (out_format in ["mp3", "m4a", "wav", "aac", "flac", "opus"])
+    target_audio_ext = out_format if out_format in ["mp3", "m4a", "wav", "aac", "flac", "opus"] else "mp3"
+
     # ── Universal High-Quality Format Selector ────────────────────────────────
-    # Prioritizes:
-    # 1. High-bitrate 1080p H.264 (avc1) + M4A AAC audio
-    # 2. Universal AAC audio compatibility (Merger re-encodes to AAC if Opus selected)
-    # 3. High-bitrate HLS streams (up to 4.8 Mbps)
-    if audio_only or out_format == "mp3":
-        fmt = "bestaudio[ext=m4a]/bestaudio/best"
+    if is_audio_mode:
+        fmt = "bestaudio[ext=m4a]/bestaudio/bestvideo+bestaudio/best"
     elif quality == "1080p":
         fmt = (
             "bestvideo[height=1080][vcodec^=avc1]+bestaudio[ext=m4a]/"
@@ -360,101 +359,138 @@ def run_trim_download(
             "bestvideo+bestaudio/best"
         )
 
-    base_ytdlp = [
-        sys.executable, "-m", "yt_dlp",
-        "-4",
-        "--no-playlist",
-        "--no-warnings",
-        "--extractor-args", "youtube:player_client=android,web,tv",
-        "--retries", "10",
-        "--fragment-retries", "10",
-        "--retry-sleep", "2",
-    ]
-    if FFMPEG_DIR:
-        base_ytdlp += ["--ffmpeg-location", FFMPEG_DIR]
-    if os.path.exists(COOKIES_FILE):
-        base_ytdlp += ["--cookies", COOKIES_FILE]
-    if NODE_PATH and os.path.exists(NODE_PATH):
-        base_ytdlp += [
-            "--js-runtimes", f"node:{NODE_PATH}",
-            "--remote-components", "ejs:github",
-        ]
-
     # ─────────────────────────────────────────────────────────────────────────
-    # CASE A: Full download (no trimming needed)
+    # CASE A: Full Download (Audio or Video)
     # ─────────────────────────────────────────────────────────────────────────
     if is_full_download:
         progress_callback(10, "Starting full download...", eta_seconds=60)
+        base_ytdlp = [
+            sys.executable, "-m", "yt_dlp",
+            "-4", "--no-playlist", "--no-warnings",
+            "--extractor-args", "youtube:player_client=android,web,tv",
+            "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
+        ]
+        if FFMPEG_DIR:
+            base_ytdlp += ["--ffmpeg-location", FFMPEG_DIR]
+        if os.path.exists(COOKIES_FILE):
+            base_ytdlp += ["--cookies", COOKIES_FILE]
+        if NODE_PATH and os.path.exists(NODE_PATH):
+            base_ytdlp += ["--js-runtimes", f"node:{NODE_PATH}", "--remote-components", "ejs:github"]
+
         cmd = base_ytdlp + [
             "--format", fmt,
             "--output", outtmpl,
             "--newline",
             "--no-part",
         ]
-        if not (audio_only or out_format == "mp3"):
+        if is_audio_mode:
+            cmd += ["--extract-audio", "--audio-format", target_audio_ext, "--audio-quality", "0"]
+        else:
             cmd += [
                 "--merge-output-format", out_format,
                 "--postprocessor-args", "Merger:-c:a aac -b:a 192k",
             ]
-        if audio_only or out_format == "mp3":
-            cmd += ["--extract-audio", "--audio-format", "mp3", "--audio-quality", "0"]
         cmd.append(url)
         _run_ytdlp_subprocess(cmd, progress_callback, clip_dur, 7200, initial_pct=10)
-        progress_callback(98, "Finalizing...", eta_seconds=2)
-        ext = "mp3" if (audio_only or out_format == "mp3") else out_format
+        progress_callback(98, "Finalizing download...", eta_seconds=2)
+        ext = target_audio_ext if is_audio_mode else out_format
         return _locate_output(output_dir, file_prefix, ext)
 
     start_fmt = format_seconds_to_timestamp(start_sec)
     end_fmt   = format_seconds_to_timestamp(end_sec)
+    timeout   = max(300, int(clip_dur * 3) + 300)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # CASE B: Audio-only trim
+    # CASE B: Audio-Only Trim (2-Stage Adaptive Downloader)
     # ─────────────────────────────────────────────────────────────────────────
-    if audio_only or out_format == "mp3":
-        progress_callback(10, "Starting audio download...", eta_seconds=30)
-        cmd = base_ytdlp + [
+    if is_audio_mode:
+        progress_callback(10, "Connecting to audio stream...", eta_seconds=20)
+        
+        # Audio Stage 1: web_embedded + JS runtime
+        base_audio_s1 = [
+            sys.executable, "-m", "yt_dlp",
+            "-4", "--no-playlist", "--no-warnings",
+            "--extractor-args", "youtube:player_client=web_embedded,android_vr,web",
+            "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
+        ]
+        if FFMPEG_DIR:
+            base_audio_s1 += ["--ffmpeg-location", FFMPEG_DIR]
+        if os.path.exists(COOKIES_FILE):
+            base_audio_s1 += ["--cookies", COOKIES_FILE]
+        if NODE_PATH and os.path.exists(NODE_PATH):
+            base_audio_s1 += ["--js-runtimes", f"node:{NODE_PATH}", "--remote-components", "ejs:github"]
+
+        cmd_audio_s1 = base_audio_s1 + [
             "--format", fmt,
             "--output", outtmpl,
             "--newline",
             "--extract-audio",
-            "--audio-format", "mp3",
+            "--audio-format", target_audio_ext,
             "--audio-quality", "0",
             "--download-sections", f"*{start_fmt}-{end_fmt}",
             "--concurrent-fragments", "4",
             "--no-part",
             url,
         ]
-        timeout = max(300, int(clip_dur * 3) + 300)
-        _run_ytdlp_subprocess(cmd, progress_callback, clip_dur, timeout, initial_pct=10)
-        progress_callback(98, "Finalizing MP3...", eta_seconds=2)
-        return _locate_output(output_dir, file_prefix, "mp3")
+
+        try:
+            _run_ytdlp_subprocess(cmd_audio_s1, progress_callback, clip_dur, timeout, initial_pct=10)
+            progress_callback(98, f"Finalizing {target_audio_ext.upper()} Audio...", eta_seconds=2)
+            return _locate_output(output_dir, file_prefix, target_audio_ext)
+        except Exception as e:
+            print(f"Audio Stage 1 notice: {e}. Switching to Audio Stage 2 fallback...", flush=True)
+
+        # Audio Stage 2: Android/Web Fallback
+        progress_callback(20, "Extracting audio from universal stream...", eta_seconds=15)
+        base_audio_s2 = [
+            sys.executable, "-m", "yt_dlp",
+            "-4", "--no-playlist", "--no-warnings",
+            "--extractor-args", "youtube:player_client=android,web,tv",
+            "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
+        ]
+        if FFMPEG_DIR:
+            base_audio_s2 += ["--ffmpeg-location", FFMPEG_DIR]
+        if os.path.exists(COOKIES_FILE):
+            base_audio_s2 += ["--cookies", COOKIES_FILE]
+        if NODE_PATH and os.path.exists(NODE_PATH):
+            base_audio_s2 += ["--js-runtimes", f"node:{NODE_PATH}", "--remote-components", "ejs:github"]
+
+        cmd_audio_s2 = base_audio_s2 + [
+            "--format", "bestaudio/bestvideo+bestaudio/best",
+            "--output", outtmpl,
+            "--newline",
+            "--extract-audio",
+            "--audio-format", target_audio_ext,
+            "--audio-quality", "0",
+            "--download-sections", f"*{start_fmt}-{end_fmt}",
+            "--concurrent-fragments", "4",
+            "--no-part",
+            url,
+        ]
+
+        _run_ytdlp_subprocess(cmd_audio_s2, progress_callback, clip_dur, timeout, initial_pct=20)
+        progress_callback(98, f"Finalizing {target_audio_ext.upper()}...", eta_seconds=2)
+        return _locate_output(output_dir, file_prefix, target_audio_ext)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # CASE C: Video trim (Adaptive 2-Stage High Quality Downloader)
+    # CASE C: Video Trim (Adaptive 2-Stage High Quality Downloader)
     # ─────────────────────────────────────────────────────────────────────────
     progress_callback(10, "Connecting to YouTube high-quality stream...", eta_seconds=15)
-    timeout = max(600, int(clip_dur * 4) + 600)
+    video_timeout = max(600, int(clip_dur * 4) + 600)
 
-    # STAGE 1: Pristine Full HD 1080p with web_embedded + JS solver
+    # Video STAGE 1: Pristine Full HD 1080p with web_embedded + JS solver
     base_stage1 = [
         sys.executable, "-m", "yt_dlp",
-        "-4",
-        "--no-playlist",
-        "--no-warnings",
+        "-4", "--no-playlist", "--no-warnings",
         "--extractor-args", "youtube:player_client=web_embedded,android_vr,web",
-        "--retries", "10",
-        "--fragment-retries", "10",
-        "--retry-sleep", "2",
+        "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
     ]
     if FFMPEG_DIR:
         base_stage1 += ["--ffmpeg-location", FFMPEG_DIR]
     if os.path.exists(COOKIES_FILE):
         base_stage1 += ["--cookies", COOKIES_FILE]
     if NODE_PATH and os.path.exists(NODE_PATH):
-        base_stage1 += [
-            "--js-runtimes", f"node:{NODE_PATH}",
-            "--remote-components", "ejs:github",
-        ]
+        base_stage1 += ["--js-runtimes", f"node:{NODE_PATH}", "--remote-components", "ejs:github"]
 
     cmd_stage1 = base_stage1 + [
         "--format", fmt,
@@ -469,33 +505,26 @@ def run_trim_download(
     ]
 
     try:
-        _run_ytdlp_subprocess(cmd_stage1, progress_callback, clip_dur, timeout, initial_pct=10)
+        _run_ytdlp_subprocess(cmd_stage1, progress_callback, clip_dur, video_timeout, initial_pct=10)
         progress_callback(98, "Finalizing Full HD...", eta_seconds=2)
         return _locate_output(output_dir, file_prefix, out_format)
     except Exception as e:
         print(f"Stage 1 encountered issue: {e}. Switching to Stage 2 universal fallback...", flush=True)
 
-    # STAGE 2: Universal Fallback for restricted/non-embeddable videos
+    # Video STAGE 2: Universal Fallback for restricted/non-embeddable videos
     progress_callback(15, "Switching to universal stream...", eta_seconds=15)
     base_stage2 = [
         sys.executable, "-m", "yt_dlp",
-        "-4",
-        "--no-playlist",
-        "--no-warnings",
+        "-4", "--no-playlist", "--no-warnings",
         "--extractor-args", "youtube:player_client=android,web,tv",
-        "--retries", "10",
-        "--fragment-retries", "10",
-        "--retry-sleep", "2",
+        "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
     ]
     if FFMPEG_DIR:
         base_stage2 += ["--ffmpeg-location", FFMPEG_DIR]
     if os.path.exists(COOKIES_FILE):
         base_stage2 += ["--cookies", COOKIES_FILE]
     if NODE_PATH and os.path.exists(NODE_PATH):
-        base_stage2 += [
-            "--js-runtimes", f"node:{NODE_PATH}",
-            "--remote-components", "ejs:github",
-        ]
+        base_stage2 += ["--js-runtimes", f"node:{NODE_PATH}", "--remote-components", "ejs:github"]
 
     fallback_fmt = "bestvideo[height<=1080]+bestaudio/best"
     cmd_stage2 = base_stage2 + [
@@ -510,7 +539,6 @@ def run_trim_download(
         url,
     ]
 
-    _run_ytdlp_subprocess(cmd_stage2, progress_callback, clip_dur, timeout, initial_pct=15)
+    _run_ytdlp_subprocess(cmd_stage2, progress_callback, clip_dur, video_timeout, initial_pct=15)
     progress_callback(98, "Finalizing...", eta_seconds=2)
     return _locate_output(output_dir, file_prefix, out_format)
-
