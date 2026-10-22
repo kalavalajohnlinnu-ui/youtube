@@ -3,7 +3,7 @@
 // --------------------------------------------------------------------------
 
 // Active default public backend tunnel for GitHub Pages & Remote devices
-const DEFAULT_GITHUB_BACKEND = 'https://modern-donkey-13.loca.lt';
+const DEFAULT_GITHUB_BACKEND = 'https://chips-technique-accordingly-pair.trycloudflare.com';
 
 let API_BASE_URL = localStorage.getItem('cliptube_backend_url') || (
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
