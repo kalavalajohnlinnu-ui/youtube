@@ -3,7 +3,21 @@
 // --------------------------------------------------------------------------
 
 // Active default public backend tunnel for GitHub Pages & Remote devices
-const DEFAULT_GITHUB_BACKEND = 'https://chips-technique-accordingly-pair.trycloudflare.com';
+const DEFAULT_GITHUB_BACKEND = 'https://tracking-coaching-when-accepting.trycloudflare.com';
+
+
+// Auto-sync active backend from repository backend.json
+if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    fetch('backend.json?_t=' + Date.now())
+        .then(res => res.ok ? res.json() : null)
+        .then(cfg => {
+            if (cfg && cfg.url && cfg.url.startsWith('https://')) {
+                API_BASE_URL = cfg.url;
+                checkBackendHealth();
+            }
+        })
+        .catch(() => {});
+}
 
 let API_BASE_URL = localStorage.getItem('cliptube_backend_url') || (
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -107,11 +121,22 @@ const audioPreviewElement = document.getElementById('audioPreviewElement');
 
 const fallbackCloudDlBlock = document.getElementById('fallbackCloudDlBlock');
 const cloudClipSummary = document.getElementById('cloudClipSummary');
-const cloudTrimOnlineBtn = document.getElementById('cloudTrimOnlineBtn');
-const cloudDlAudioBtn = document.getElementById('cloudDlAudioBtn');
-const cloudDlVideoBtn = document.getElementById('cloudDlVideoBtn');
+const retryDirectProcessBtn = document.getElementById('retryDirectProcessBtn');
+const openServerConfigBtn = document.getElementById('openServerConfigBtn');
 const localAudioFileInput = document.getElementById('localAudioFileInput');
 const localFileStatus = document.getElementById('localFileStatus');
+
+if (retryDirectProcessBtn) {
+    retryDirectProcessBtn.addEventListener('click', () => {
+        fallbackCloudDlBlock.classList.add('hidden');
+        startProcessing();
+    });
+}
+if (openServerConfigBtn) {
+    openServerConfigBtn.addEventListener('click', () => {
+        serverModal.classList.remove('hidden');
+    });
+}
 
 const serverConfigBtn = document.getElementById('serverConfigBtn');
 const serverStatusText = document.getElementById('serverStatusText');
@@ -708,7 +733,7 @@ async function startProcessing() {
     etaTimeText.textContent = "~6s remaining";
 
     // Setup direct cloud fallback links
-    setupCloudHubLinks(videoId, start_time, end_time);
+    
 
     try {
         const response = await fetch(getApiUrl('/api/trim'), {
@@ -723,7 +748,7 @@ async function startProcessing() {
                 audio_only,
                 is_full_download
             }),
-            signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined
+            signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined
         });
 
         if (!response.ok) {
@@ -739,28 +764,20 @@ async function startProcessing() {
 
     } catch (err) {
         // Smoothly activate Cloud Hub instead of failing
-        activateCloudHubFallback(start_time, end_time);
+        activateConnectionAlert(err.message, start_time, end_time);
     }
 }
 
-function setupCloudHubLinks(videoId, start_time, end_time) {
-    if (!videoId) return;
-    const sSec = parseTimeToSec(start_time);
-    const eSec = parseTimeToSec(end_time);
-
-    cloudClipSummary.innerHTML = `Selected range: <strong style="color:#10B981;">${start_time}</strong> ➜ <strong style="color:#10B981;">${end_time}</strong> (${formatSecondsToTimestamp(Math.max(1, eSec - sSec), false)})`;
-    cloudTrimOnlineBtn.href = `https://ytcutter.com/#${videoId}`;
-    cloudDlAudioBtn.href = `https://www.y2mate.com/youtube-mp3/${videoId}`;
-    cloudDlVideoBtn.href = `https://www.y2mate.com/youtube/${videoId}`;
-}
-
-function activateCloudHubFallback(start_time, end_time) {
-    statusIcon.className = "fa-solid fa-cloud-arrow-down";
-    statusTitle.textContent = "Universal Cloud Trimmer Hub Ready";
-    progressMessage.textContent = "Ready to download and trim via fast cloud engines.";
+function activateConnectionAlert(msg, start_time, end_time) {
+    statusIcon.className = "fa-solid fa-triangle-exclamation";
+    statusTitle.textContent = "Processing Alert";
+    progressMessage.textContent = msg || "Could not reach processing engine. Click Retry below.";
     progressBarFill.style.width = "100%";
-    progressPct.textContent = "100%";
-    etaTimeText.textContent = "Ready";
+    progressPct.textContent = "!";
+    etaTimeText.textContent = "Stopped";
+    if (cloudClipSummary) {
+        cloudClipSummary.innerHTML = `Selected range: <strong style="color:#10B981;">${start_time}</strong> ➜ <strong style="color:#10B981;">${end_time}</strong>`;
+    }
     fallbackCloudDlBlock.classList.remove('hidden');
 }
 
@@ -844,12 +861,12 @@ async function pollTaskStatus() {
         } else if (data.status === 'error') {
             clearInterval(pollTimer);
             pollTimer = null;
-            activateCloudHubFallback(getStartFormatted(), getEndFormatted());
+            activateConnectionAlert('Processing stopped', getStartFormatted(), getEndFormatted());
         }
     } catch (e) {
         clearInterval(pollTimer);
         pollTimer = null;
-        activateCloudHubFallback(getStartFormatted(), getEndFormatted());
+        activateConnectionAlert('Processing stopped', getStartFormatted(), getEndFormatted());
     }
 }
 
