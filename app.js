@@ -3,21 +3,41 @@
 // --------------------------------------------------------------------------
 
 // Active default public backend tunnel for GitHub Pages & Remote devices
-const DEFAULT_GITHUB_BACKEND = 'https://tracking-coaching-when-accepting.trycloudflare.com';
+const DEFAULT_GITHUB_BACKEND = 'https://genes-preparing-suppose-pas.trycloudflare.com';
 
 
-// Auto-sync active backend from repository backend.json
-if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    fetch('backend.json?_t=' + Date.now())
-        .then(res => res.ok ? res.json() : null)
-        .then(cfg => {
-            if (cfg && cfg.url && cfg.url.startsWith('https://')) {
-                API_BASE_URL = cfg.url;
-                checkBackendHealth();
+// Auto-sync active backend from repository backend.json (with cache buster & raw GitHub fallback)
+async function syncActiveBackend() {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        API_BASE_URL = '';
+        checkBackendHealth();
+        return;
+    }
+
+    const t = Date.now();
+    const endpoints = [
+        'backend.json?_t=' + t,
+        'https://raw.githubusercontent.com/kalavalajohnlinnu-ui/youtube/main/backend.json?_t=' + t
+    ];
+
+    for (const ep of endpoints) {
+        try {
+            const res = await fetch(ep, { cache: 'no-store' });
+            if (res.ok) {
+                const cfg = await res.json();
+                if (cfg && cfg.url && cfg.url.startsWith('https://')) {
+                    API_BASE_URL = cfg.url;
+                    localStorage.setItem('cliptube_backend_url', cfg.url);
+                    if (backendUrlInput) backendUrlInput.value = cfg.url;
+                    checkBackendHealth();
+                    return;
+                }
             }
-        })
-        .catch(() => {});
+        } catch (_) {}
+    }
+    checkBackendHealth();
 }
+syncActiveBackend();
 
 let API_BASE_URL = localStorage.getItem('cliptube_backend_url') || (
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -763,8 +783,21 @@ async function startProcessing() {
         pollTimer = setInterval(pollTaskStatus, 1000);
 
     } catch (err) {
-        // Smoothly activate Cloud Hub instead of failing
-        activateConnectionAlert(err.message, start_time, end_time);
+        // Try auto-resync in case backend URL was just updated
+        try {
+            const rawRes = await fetch('https://raw.githubusercontent.com/kalavalajohnlinnu-ui/youtube/main/backend.json?_t=' + Date.now(), { cache: 'no-store' });
+            if (rawRes.ok) {
+                const rawCfg = await rawRes.json();
+                if (rawCfg && rawCfg.url && rawCfg.url !== API_BASE_URL) {
+                    API_BASE_URL = rawCfg.url;
+                    localStorage.setItem('cliptube_backend_url', rawCfg.url);
+                    // Immediate retry with fresh URL
+                    return startProcessing();
+                }
+            }
+        } catch (_) {}
+
+        activateConnectionAlert(err.message || 'Server connection failed', start_time, end_time);
     }
 }
 
@@ -835,7 +868,8 @@ async function pollTaskStatus() {
             
             if (audioPreviewBlock && audioPreviewElement) {
                 if (isAudioFile) {
-                    audioPreviewElement.src = resolvedDownloadUrl;
+                    const streamUrl = getApiUrl(`/api/stream/${data.filename}`);
+                    audioPreviewElement.src = streamUrl;
                     audioPreviewBlock.classList.remove('hidden');
                     audioPreviewElement.load();
                 } else {

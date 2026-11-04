@@ -285,6 +285,67 @@ def _locate_output(output_dir: str, prefix: str, preferred_ext: str) -> str:
 # Main Download Entry Point
 # ─────────────────────────────────────────────────────────────────────────────
 
+
+def _direct_audio_slice(
+    url: str,
+    start_sec: float,
+    duration_sec: float,
+    output_path: str,
+    audio_ext: str,
+    progress_callback: Callable,
+    is_full_download: bool = False
+):
+    """
+    Bulletproof Stage 3 Audio Extractor:
+    Resolves direct audio stream URL via yt-dlp -g and slices with FFmpeg directly.
+    Guaranteed to bypass fragment errors, live stream buffering, and postprocessor glitches.
+    """
+    progress_callback(30, "Resolving direct audio stream...", eta_seconds=10)
+    ytdlp_cmd = [
+        sys.executable, "-m", "yt_dlp",
+        "-4", "--no-playlist", "--no-warnings",
+        "-f", "bestaudio/best",
+        "-g", url
+    ]
+    if os.path.exists(COOKIES_FILE):
+        ytdlp_cmd += ["--cookies", COOKIES_FILE]
+    if NODE_PATH and os.path.exists(NODE_PATH):
+        ytdlp_cmd += ["--js-runtimes", f"node:{NODE_PATH}", "--remote-components", "ejs:github"]
+
+    res = subprocess.run(ytdlp_cmd, capture_output=True, text=True, timeout=40)
+    if res.returncode != 0 or not res.stdout.strip():
+        raise RuntimeError(f"Could not resolve direct audio stream: {res.stderr[:200]}")
+
+    stream_url = res.stdout.strip().split("\n")[0]
+    progress_callback(55, f"Extracting audio track ({audio_ext.upper()})...", eta_seconds=6)
+
+    ffmpeg_binary = FFMPEG_EXE or "ffmpeg"
+    start_str = format_seconds_to_timestamp(start_sec)
+
+    ff_cmd = [ffmpeg_binary, "-y"]
+    if not is_full_download:
+        ff_cmd += ["-ss", start_str, "-t", str(max(1.0, duration_sec))]
+
+    ff_cmd += ["-i", stream_url, "-vn"]
+
+    if audio_ext == "mp3":
+        ff_cmd += ["-c:a", "libmp3lame", "-b:a", "320k"]
+    elif audio_ext in ["m4a", "aac"]:
+        ff_cmd += ["-c:a", "aac", "-b:a", "256k"]
+    elif audio_ext == "wav":
+        ff_cmd += ["-c:a", "pcm_s16le"]
+    elif audio_ext == "flac":
+        ff_cmd += ["-c:a", "flac"]
+    else:
+        ff_cmd += ["-b:a", "320k"]
+
+    ff_cmd.append(output_path)
+
+    ff_res = subprocess.run(ff_cmd, capture_output=True, text=True, timeout=300)
+    if ff_res.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+        raise RuntimeError(f"Direct audio extraction failed: {ff_res.stderr[-300:]}")
+
+
 def run_trim_download(
     url: str,
     start_time: str,
@@ -391,10 +452,19 @@ def run_trim_download(
                 "--postprocessor-args", "Merger:-c:a aac -b:a 192k",
             ]
         cmd.append(url)
-        _run_ytdlp_subprocess(cmd, progress_callback, clip_dur, 7200, initial_pct=10)
-        progress_callback(98, "Finalizing download...", eta_seconds=2)
-        ext = target_audio_ext if is_audio_mode else out_format
-        return _locate_output(output_dir, file_prefix, ext)
+        try:
+            _run_ytdlp_subprocess(cmd, progress_callback, clip_dur, 7200, initial_pct=10)
+            progress_callback(98, "Finalizing download...", eta_seconds=2)
+            ext = target_audio_ext if is_audio_mode else out_format
+            return _locate_output(output_dir, file_prefix, ext)
+        except Exception as e:
+            if is_audio_mode:
+                print(f"Full audio download notice: {e}. Switching to direct slice fallback...", flush=True)
+                out_file = os.path.join(output_dir, f"{file_prefix}.{target_audio_ext}")
+                _direct_audio_slice(url, 0, 7200, out_file, target_audio_ext, progress_callback, is_full_download=True)
+                progress_callback(98, f"Finalizing {target_audio_ext.upper()}...", eta_seconds=1)
+                return os.path.basename(out_file)
+            raise
 
     start_fmt = format_seconds_to_timestamp(start_sec)
     end_fmt   = format_seconds_to_timestamp(end_sec)
@@ -468,9 +538,19 @@ def run_trim_download(
             url,
         ]
 
-        _run_ytdlp_subprocess(cmd_audio_s2, progress_callback, clip_dur, timeout, initial_pct=20)
-        progress_callback(98, f"Finalizing {target_audio_ext.upper()}...", eta_seconds=2)
-        return _locate_output(output_dir, file_prefix, target_audio_ext)
+        try:
+            _run_ytdlp_subprocess(cmd_audio_s2, progress_callback, clip_dur, timeout, initial_pct=20)
+            progress_callback(98, f"Finalizing {target_audio_ext.upper()}...", eta_seconds=2)
+            return _locate_output(output_dir, file_prefix, target_audio_ext)
+        except Exception as e2:
+            print(f"Audio Stage 2 notice: {e2}. Switching to Audio Stage 3 direct slice fallback...", flush=True)
+
+        # Audio Stage 3: Bulletproof Direct Stream Slice (yt-dlp -g + ffmpeg)
+        progress_callback(30, "Extracting audio with high-precision direct slicer...", eta_seconds=8)
+        out_file = os.path.join(output_dir, f"{file_prefix}.{target_audio_ext}")
+        _direct_audio_slice(url, start_sec, clip_dur, out_file, target_audio_ext, progress_callback, is_full_download=False)
+        progress_callback(98, f"Finalizing {target_audio_ext.upper()}...", eta_seconds=1)
+        return os.path.basename(out_file)
 
     # ─────────────────────────────────────────────────────────────────────────
     # CASE C: Video Trim (Adaptive 2-Stage High Quality Downloader)

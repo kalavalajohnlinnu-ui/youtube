@@ -171,7 +171,21 @@ def get_task_status(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
     return tasks_db[task_id]
 
+MEDIA_TYPES = {
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".wav": "audio/wav",
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".opus": "audio/opus",
+    ".mp4": "video/mp4",
+    ".mkv": "video/x-matroska",
+    ".webm": "video/webm",
+}
+
 @app.get("/api/download/{filename}")
+@app.head("/api/download/{filename}")
 def download_file(filename: str):
     safe_filename = os.path.basename(filename)
     filepath = os.path.join(DOWNLOADS_DIR, safe_filename)
@@ -179,24 +193,30 @@ def download_file(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
     
     ext = os.path.splitext(safe_filename)[1].lower()
-    media_types = {
-        ".mp3": "audio/mpeg",
-        ".m4a": "audio/mp4",
-        ".wav": "audio/wav",
-        ".aac": "audio/aac",
-        ".flac": "audio/flac",
-        ".ogg": "audio/ogg",
-        ".opus": "audio/opus",
-        ".mp4": "video/mp4",
-        ".mkv": "video/x-matroska",
-        ".webm": "video/webm",
-    }
-    media_type = media_types.get(ext, "application/octet-stream")
+    media_type = MEDIA_TYPES.get(ext, "application/octet-stream")
     
     return FileResponse(
         path=filepath,
         filename=safe_filename,
-        media_type=media_type
+        media_type=media_type,
+        content_disposition_type="attachment"
+    )
+
+@app.get("/api/stream/{filename}")
+@app.head("/api/stream/{filename}")
+def stream_file(filename: str):
+    safe_filename = os.path.basename(filename)
+    filepath = os.path.join(DOWNLOADS_DIR, safe_filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    ext = os.path.splitext(safe_filename)[1].lower()
+    media_type = MEDIA_TYPES.get(ext, "application/octet-stream")
+    
+    return FileResponse(
+        path=filepath,
+        media_type=media_type,
+        content_disposition_type="inline"
     )
 
 @app.get("/api/history")
