@@ -28,6 +28,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_private_network_headers(request, call_next):
+    if request.method == "OPTIONS":
+        response = JSONResponse(content={})
+    else:
+        response = await call_next(request)
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
+
 tasks_db: Dict[str, Dict[str, Any]] = {}
 history_db: List[Dict[str, Any]] = []
 

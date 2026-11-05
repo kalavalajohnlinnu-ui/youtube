@@ -3,7 +3,7 @@
 // --------------------------------------------------------------------------
 
 // Active default public backend tunnel for GitHub Pages & Remote devices
-const DEFAULT_GITHUB_BACKEND = 'https://api.trycloudflare.com';
+const DEFAULT_GITHUB_BACKEND = 'https://flour-simply-website-shannon.trycloudflare.com';
 
 
 // Auto-sync active backend from repository backend.json (with cache buster & raw GitHub fallback)
@@ -147,7 +147,10 @@ const localAudioFileInput = document.getElementById('localAudioFileInput');
 const localFileStatus = document.getElementById('localFileStatus');
 
 if (retryDirectProcessBtn) {
-    retryDirectProcessBtn.addEventListener('click', () => {
+    retryDirectProcessBtn.addEventListener('click', async () => {
+        retryDirectProcessBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Reconnecting...';
+        await syncActiveBackend();
+        retryDirectProcessBtn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Retry Connection';
         fallbackCloudDlBlock.classList.add('hidden');
         startProcessing();
     });
