@@ -16,8 +16,8 @@ async function syncActiveBackend() {
 
     const t = Date.now();
     const endpoints = [
-        'backend.json?_t=' + t,
-        'https://raw.githubusercontent.com/kalavalajohnlinnu-ui/youtube/main/backend.json?_t=' + t
+        'https://raw.githubusercontent.com/kalavalajohnlinnu-ui/youtube/main/backend.json?_t=' + t,
+        'backend.json?_t=' + t
     ];
 
     for (const ep of endpoints) {
