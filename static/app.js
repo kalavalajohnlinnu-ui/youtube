@@ -3,7 +3,7 @@
 // --------------------------------------------------------------------------
 
 // Active default public backend tunnel for GitHub Pages & Remote devices
-const DEFAULT_GITHUB_BACKEND = 'https://switch-concept-willing-simply.trycloudflare.com';
+const DEFAULT_GITHUB_BACKEND = 'https://years-fantasy-billy-mai.trycloudflare.com';
 
 
 // Auto-sync active backend from repository backend.json (with cache buster & raw GitHub fallback)
