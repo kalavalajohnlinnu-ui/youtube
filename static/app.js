@@ -3,7 +3,7 @@
 // --------------------------------------------------------------------------
 
 // Active default public backend tunnel for GitHub Pages & Remote devices
-const DEFAULT_GITHUB_BACKEND = 'https://algorithms-vault-valuable-repair.trycloudflare.com';
+const DEFAULT_GITHUB_BACKEND = 'https://vital-cinema-badly-trainers.trycloudflare.com';
 
 
 // Auto-sync active backend from repository backend.json (with cache buster & raw GitHub fallback)
