@@ -3,16 +3,30 @@
 // --------------------------------------------------------------------------
 
 // Active default public backend tunnel for GitHub Pages & Remote devices
-const DEFAULT_GITHUB_BACKEND = 'https://struct-long-rehabilitation-notes.trycloudflare.com';
+const DEFAULT_GITHUB_BACKEND = 'https://andrea-restrict-medal-holdem.trycloudflare.com';
 
 
-// Auto-sync active backend from repository backend.json (with cache buster & raw GitHub fallback)
+// Auto-sync active backend from repository backend.json (with cache buster & local host auto-detection)
 async function syncActiveBackend() {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         API_BASE_URL = '';
         checkBackendHealth();
         return;
     }
+
+    // Check if running on same PC where backend is running on port 8000
+    try {
+        const localCheck = await fetch('http://127.0.0.1:8000/api/health', {
+            signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined
+        });
+        if (localCheck.ok) {
+            API_BASE_URL = 'http://127.0.0.1:8000';
+            localStorage.setItem('cliptube_backend_url', 'http://127.0.0.1:8000');
+            if (backendUrlInput) backendUrlInput.value = 'http://127.0.0.1:8000';
+            checkBackendHealth();
+            return;
+        }
+    } catch (_) {}
 
     const t = Date.now();
     const endpoints = [
@@ -25,7 +39,7 @@ async function syncActiveBackend() {
             const res = await fetch(ep, { cache: 'no-store' });
             if (res.ok) {
                 const cfg = await res.json();
-                if (cfg && cfg.url && cfg.url.startsWith('https://')) {
+                if (cfg && cfg.url && (cfg.url.startsWith('https://') || cfg.url.startsWith('http://'))) {
                     API_BASE_URL = cfg.url;
                     localStorage.setItem('cliptube_backend_url', cfg.url);
                     if (backendUrlInput) backendUrlInput.value = cfg.url;
@@ -786,7 +800,18 @@ async function startProcessing() {
         pollTimer = setInterval(pollTaskStatus, 1000);
 
     } catch (err) {
-        // Try auto-resync in case backend URL was just updated
+        // Try auto-resync in case backend URL was just updated or localhost is available
+        try {
+            const localCheck = await fetch('http://127.0.0.1:8000/api/health', {
+                signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined
+            });
+            if (localCheck.ok) {
+                API_BASE_URL = 'http://127.0.0.1:8000';
+                localStorage.setItem('cliptube_backend_url', 'http://127.0.0.1:8000');
+                return startProcessing();
+            }
+        } catch (_) {}
+
         try {
             const rawRes = await fetch('https://raw.githubusercontent.com/kalavalajohnlinnu-ui/youtube/main/backend.json?_t=' + Date.now(), { cache: 'no-store' });
             if (rawRes.ok) {
