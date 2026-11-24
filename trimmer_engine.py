@@ -382,42 +382,38 @@ def run_trim_download(
 
     # ── Universal High-Quality Format Selector ────────────────────────────────
     if is_audio_mode:
-        fmt = "bestaudio[ext=m4a]/bestaudio/bestvideo+bestaudio/best"
+        fmt = "bestaudio/best"
     elif quality == "1080p":
         fmt = (
-            "bestvideo[height=1080][vcodec^=avc1]+bestaudio[ext=m4a]/"
-            "bestvideo[height=1080][vcodec^=avc1]+bestaudio/"
             "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]/"
             "bestvideo[height<=1080][vcodec^=avc1]+bestaudio/"
-            "best[height=1080][protocol^=m3u8]/"
-            "bestvideo[height<=1080]+bestaudio[ext=m4a]/"
-            "bestvideo[height<=1080]+bestaudio/best"
+            "bestvideo[height<=1080]+bestaudio/"
+            "best[height<=1080]/"
+            "bestvideo+bestaudio/best"
         )
     elif quality == "720p":
         fmt = (
-            "bestvideo[height=720][vcodec^=avc1]+bestaudio[ext=m4a]/"
-            "bestvideo[height=720][vcodec^=avc1]+bestaudio/"
             "bestvideo[height<=720][vcodec^=avc1]+bestaudio[ext=m4a]/"
             "bestvideo[height<=720][vcodec^=avc1]+bestaudio/"
-            "best[height=720][protocol^=m3u8]/"
-            "bestvideo[height<=720]+bestaudio[ext=m4a]/"
-            "bestvideo[height<=720]+bestaudio/best"
+            "bestvideo[height<=720]+bestaudio/"
+            "best[height<=720]/"
+            "bestvideo+bestaudio/best"
         )
     elif quality == "480p":
         fmt = (
-            "bestvideo[height=480][vcodec^=avc1]+bestaudio[ext=m4a]/"
-            "bestvideo[height=480][vcodec^=avc1]+bestaudio/"
+            "bestvideo[height<=480][vcodec^=avc1]+bestaudio[ext=m4a]/"
             "bestvideo[height<=480][vcodec^=avc1]+bestaudio/"
-            "best[height=480][protocol^=m3u8]/"
-            "bestvideo[height<=480]+bestaudio/best"
+            "bestvideo[height<=480]+bestaudio/"
+            "best[height<=480]/"
+            "bestvideo+bestaudio/best"
         )
     else:  # "best"
         fmt = (
             "bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]/"
             "bestvideo[vcodec^=avc1]+bestaudio/"
-            "best[protocol^=m3u8]/"
             "bestvideo+bestaudio[ext=m4a]/"
-            "bestvideo+bestaudio/best"
+            "bestvideo+bestaudio/"
+            "best"
         )
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -428,7 +424,6 @@ def run_trim_download(
         base_ytdlp = [
             sys.executable, "-m", "yt_dlp",
             "-4", "--no-playlist", "--no-warnings",
-            "--extractor-args", "youtube:player_client=android,web,tv",
             "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
         ]
         if FFMPEG_DIR:
@@ -476,11 +471,10 @@ def run_trim_download(
     if is_audio_mode:
         progress_callback(10, "Connecting to audio stream...", eta_seconds=20)
         
-        # Audio Stage 1: web_embedded + JS runtime
+        # Audio Stage 1: Default with Node.js JS solver
         base_audio_s1 = [
             sys.executable, "-m", "yt_dlp",
             "-4", "--no-playlist", "--no-warnings",
-            "--extractor-args", "youtube:player_client=web_embedded,android_vr,web",
             "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
         ]
         if FFMPEG_DIR:
@@ -510,12 +504,12 @@ def run_trim_download(
         except Exception as e:
             print(f"Audio Stage 1 notice: {e}. Switching to Audio Stage 2 fallback...", flush=True)
 
-        # Audio Stage 2: Android/Web Fallback
+        # Audio Stage 2: TV/Web Fallback
         progress_callback(20, "Extracting audio from universal stream...", eta_seconds=15)
         base_audio_s2 = [
             sys.executable, "-m", "yt_dlp",
             "-4", "--no-playlist", "--no-warnings",
-            "--extractor-args", "youtube:player_client=android,web,tv",
+            "--extractor-args", "youtube:player_client=tv,web",
             "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
         ]
         if FFMPEG_DIR:
@@ -558,11 +552,10 @@ def run_trim_download(
     progress_callback(10, "Connecting to YouTube high-quality stream...", eta_seconds=15)
     video_timeout = max(600, int(clip_dur * 4) + 600)
 
-    # Video STAGE 1: Pristine Full HD 1080p with web_embedded + JS solver
+    # Video STAGE 1: Pristine Full HD with Node.js JS solver
     base_stage1 = [
         sys.executable, "-m", "yt_dlp",
         "-4", "--no-playlist", "--no-warnings",
-        "--extractor-args", "youtube:player_client=web_embedded,android_vr,web",
         "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
     ]
     if FFMPEG_DIR:
@@ -596,7 +589,7 @@ def run_trim_download(
     base_stage2 = [
         sys.executable, "-m", "yt_dlp",
         "-4", "--no-playlist", "--no-warnings",
-        "--extractor-args", "youtube:player_client=android,web,tv",
+        "--extractor-args", "youtube:player_client=tv,web",
         "--retries", "10", "--fragment-retries", "10", "--retry-sleep", "2",
     ]
     if FFMPEG_DIR:
