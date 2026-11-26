@@ -3,7 +3,7 @@
 // --------------------------------------------------------------------------
 
 // Active default public backend tunnel for GitHub Pages & Remote devices
-const DEFAULT_GITHUB_BACKEND = 'https://junior-sms-prev-wiley.trycloudflare.com';
+const DEFAULT_GITHUB_BACKEND = 'https://dominant-profiles-occasion-facial.trycloudflare.com';
 
 
 // Auto-sync active backend from repository backend.json (with cache buster & local host auto-detection)
