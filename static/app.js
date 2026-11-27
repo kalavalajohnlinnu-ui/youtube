@@ -3,7 +3,7 @@
 // --------------------------------------------------------------------------
 
 // Active default public backend tunnel for GitHub Pages & Remote devices
-const DEFAULT_GITHUB_BACKEND = 'https://dinner-completion-epson-adapted.trycloudflare.com';
+const DEFAULT_GITHUB_BACKEND = 'https://expanded-carefully-restaurants-parties.trycloudflare.com';
 
 
 // Auto-sync active backend from repository backend.json (with cache buster & raw GitHub fallback)
